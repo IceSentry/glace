@@ -42,11 +42,11 @@ mod transform;
 const LIGHT_POSITION: Vec3 = const_vec3!([2.0, 2.0, 0.0]);
 // const GLTF_MODEL_NAME: &str = "";
 
-const GLTF_MODEL_NAME: &str = "models/gltf/sponza/Sponza.gltf";
-const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
+// const GLTF_MODEL_NAME: &str = "models/gltf/sponza/Sponza.gltf";
+// const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
 
-// const GLTF_MODEL_NAME: &str = "models/gltf/FlightHelmet/FlightHelmet.gltf";
-// const SCALE: Vec3 = const_vec3!([2.5, 2.5, 2.5]);
+const GLTF_MODEL_NAME: &str = "models/gltf/FlightHelmet/FlightHelmet.gltf";
+const SCALE: Vec3 = const_vec3!([2.5, 2.5, 2.5]);
 
 // const GLTF_MODEL_NAME: &str = "models/gltf/learnopengl_cube_gltf/cube.gltf";
 // const GLTF_MODEL_NAME: &str = "sponza_gltf/Sponza.gltf";

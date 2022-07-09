@@ -53,7 +53,7 @@ fn spawn_gltf(mut commands: Commands, asset_server: Res<AssetServer>) {
             gltf: asset_server.load("models/gltf/FlightHelmet/FlightHelmet.gltf"),
         })
         .insert(Transform {
-            scale: Vec3::new(1.5, 1.5, 1.5),
+            scale: Vec3::new(2.5, 2.5, 2.5),
             ..default()
         });
 }
