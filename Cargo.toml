@@ -3,6 +3,33 @@ name = "glace"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
 
 [dependencies]
+wgpu = "0.12"
+env_logger = "0.9"
+winit = "0.26.1"
+bevy = { git = "https://github.com/bevyengine/bevy", rev = "b7d784de6e27c46cc42231e1dea94c3ba4de9463" }
+log = "0.4"
+bytemuck = { version = "1.7", features = ["derive"] }
+image = "0.24"
+anyhow = "1.0"
+tobj = { version = "3.2.2", features = ["async"] }
+futures-lite = "1.12.0"
+egui = { git = "https://github.com/emilk/egui", features = [
+    "persistence",
+], rev = "9c26093fea926ce133fee3f6d3d92e19b37dc4ee" }
+egui-wgpu = { git = "https://github.com/emilk/egui", rev = "9c26093fea926ce133fee3f6d3d92e19b37dc4ee" }
+egui-winit = { git = "https://github.com/emilk/egui", rev = "9c26093fea926ce133fee3f6d3d92e19b37dc4ee" }
+ron = "0.7.1"
+serde = "1.0.137"
+bitflags = "1.3.2"
+gltf = "1.0.0"
+web-sys = "0.3.55"
+
+[[example]]
+name = "simple_shapes"
