@@ -7,6 +7,7 @@ It can also be used to showcase integrating a custom renderer to bevy.
 * Basic Blinn-Phong shading
 * Normal mapping
 * Specular mapping
+* Instanced rendering
 * Load obj
 * Load gltf
 * egui integration
