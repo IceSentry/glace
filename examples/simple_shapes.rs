@@ -1,6 +1,4 @@
-use bevy::{
-    input::InputPlugin, math::const_vec3, prelude::*, window::WindowPlugin, winit::WinitPlugin,
-};
+use bevy::{input::InputPlugin, prelude::*, window::WindowPlugin, winit::WinitPlugin};
 
 use glace::{
     camera::CameraSettings,
@@ -15,7 +13,7 @@ use glace::{
     transform::Transform,
 };
 
-const LIGHT_POSITION: Vec3 = const_vec3!([2.0, 2.0, 2.0]);
+const LIGHT_POSITION: Vec3 = Vec3::from_array([2.0, 2.0, 2.0]);
 
 fn main() {
     env_logger::builder()

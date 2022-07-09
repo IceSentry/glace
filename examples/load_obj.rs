@@ -1,6 +1,5 @@
 use bevy::{
-    asset::AssetPlugin, input::InputPlugin, math::const_vec3, prelude::*, window::WindowPlugin,
-    winit::WinitPlugin,
+    asset::AssetPlugin, input::InputPlugin, prelude::*, window::WindowPlugin, winit::WinitPlugin,
 };
 
 use glace::{
@@ -17,27 +16,27 @@ use glace::{
     transform::Transform,
 };
 
-const LIGHT_POSITION: Vec3 = const_vec3!([4.0, 4.0, 2.0]);
+const LIGHT_POSITION: Vec3 = Vec3::from_array([4.0, 4.0, 2.0]);
 
 const NUM_INSTANCES_PER_ROW: u32 = 6;
 const SPACE_BETWEEN: f32 = 3.0;
 
 // const MODEL_NAME: &str = "models/obj/large_obj/sponza_obj/sponza.obj";
 // const MODEL_NAME: &str = "models/obj/large_obj/bistro/Exterior/exterior.obj";
-// const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
+// const SCALE: Vec3 = Vec3::from_array([0.05, 0.05, 0.05]);
 
 const MODEL_NAME: &str = "models/obj/teapot/teapot.obj";
-const SCALE: Vec3 = const_vec3!([0.025, 0.025, 0.025]);
+const SCALE: Vec3 = Vec3::from_array([0.025, 0.025, 0.025]);
 
 // const MODEL_NAME: &str = "models/obj/cube/cube.obj";
 // const MODEL_NAME: &str = "models/obj/learn_opengl/container2/cube.obj";
-// const SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
+// const SCALE: Vec3 = Vec3::from_array([1.0, 1.0, 1.0]);
 
 // const MODEL_NAME: &str = "models/obj/bunny.obj";
-// const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
+// const SCALE: Vec3 = Vec3::from_array([1.5, 1.5, 1.5]);
 
 const INSTANCED_MODEL_NAME: &str = "models/obj/cube/cube.obj";
-const INSTANCED_SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
+const INSTANCED_SCALE: Vec3 = Vec3::from_array([1.0, 1.0, 1.0]);
 
 struct InstanceSettings {
     move_instances: bool,
