@@ -1,10 +1,10 @@
-use bevy::{input::mouse::MouseMotion, math::const_vec3, prelude::*};
+use bevy::{input::mouse::MouseMotion, prelude::*};
 
 use crate::renderer::bind_groups::mesh_view::CameraUniform;
 
 const FRICTION: f32 = 0.5;
 
-const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
+const CAMERRA_EYE: Vec3 = Vec3::from_array([0.0, 5.0, 8.0]);
 
 pub struct CameraSettings {
     pub speed: f32,

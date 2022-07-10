@@ -18,7 +18,6 @@ pub async fn load_gltf<'a, 'b>(
 
     let start = Instant::now();
     let textures = load_textures(&gltf, load_context);
-
     log::info!(
         "Loaded all textures in {}ms",
         (Instant::now() - start).as_millis()
@@ -53,7 +52,6 @@ fn load_textures<'a>(
                 let load_context: &LoadContext = load_context;
                 scope.spawn(async move {
                     let texture_image = load_texture(&gltf_texture, load_context).await;
-                    log::info!("loading {:?} completed", gltf_texture.name());
                     (gltf_texture.index(), texture_image)
                 });
             });
@@ -211,9 +209,9 @@ async fn load_texture<'a>(
     let source = gltf_texture.source().source();
     Ok(match source {
         gltf::image::Source::View { .. } => todo!("Gltf view not supported"),
-        gltf::image::Source::Uri { uri, mime_type } => {
+        gltf::image::Source::Uri { uri, .. } => {
             let image_path = load_context.path().parent().unwrap().join(uri);
-            log::info!("uri: {uri} mime: {mime_type:?} path: {image_path:?}");
+            log::info!("loading texture {image_path:?}");
             let bytes = load_context.read_asset_bytes(image_path).await?;
             image::load_from_memory(&bytes)?.to_rgba8()
         }

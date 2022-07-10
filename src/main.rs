@@ -39,18 +39,19 @@ mod shapes;
 mod texture;
 mod transform;
 
-const LIGHT_POSITION: Vec3 = const_vec3!([2.0, 2.0, 0.0]);
+const LIGHT_POSITION: Vec3 = Vec3::from_array([2.0, 2.0, 0.0]);
 // const GLTF_MODEL_NAME: &str = "";
 
 // const GLTF_MODEL_NAME: &str = "models/gltf/sponza/Sponza.gltf";
-// const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
+// const SCALE: Vec3 = Vec3::from_array([0.05, 0.05, 0.05]);
 
 const GLTF_MODEL_NAME: &str = "models/gltf/FlightHelmet/FlightHelmet.gltf";
-const SCALE: Vec3 = const_vec3!([2.5, 2.5, 2.5]);
+const SCALE: Vec3 = Vec3::from_array([2.5, 2.5, 2.5]);
 
 // const GLTF_MODEL_NAME: &str = "models/gltf/learnopengl_cube_gltf/cube.gltf";
-// const GLTF_MODEL_NAME: &str = "sponza_gltf/Sponza.gltf";
-// const SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
+// const GLTF_MODEL_NAME: &str = "models/gltf/new-sponza/NewSponza_Main_Blender_glTF.gltf";
+// const GLTF_MODEL_NAME: &str = "models/gltf/suzanne/Suzanne.gltf";
+// const SCALE: Vec3 = Vec3::from_array([1.0, 1.0, 1.0]);
 
 // TODO figure out MSAA
 // TODO figure out how to draw lines and use it to draw wireframes

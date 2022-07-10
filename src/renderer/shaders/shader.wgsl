@@ -153,8 +153,8 @@ fn vertex(
 fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let object_color: vec4<f32> = textureSample(t_diffuse, s_diffuse, in.uv);
     var object_specular: vec4<f32> = textureSample(t_spec, s_spec, in.uv);
-    let spec = object_specular.g;
-    object_specular = vec4<f32>(spec, spec, spec, spec);
+    let metallic = object_specular.b;
+    object_specular = vec4<f32>(metallic, metallic, metallic, 1.0);
     // object_specular = vec4<f32>(1.0, 1.0, 1.0, 1.0) - object_specular;
 
     var N: vec3<f32>;
@@ -181,7 +181,7 @@ fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
 
     let diffuse_strength = max(dot(N, L), 0.0);
 
-    var specular_strength = max(dot(in.world_normal, H), 0.0);
+    var specular_strength = max(dot(N, H), 0.0);
     // Make sure the specular light doesn't go pass the lambertian diffuse light
     // this fixes a small artifact, but introduces very sharp cutoff
     specular_strength = specular_strength * f32(diffuse_strength > 0.0);
