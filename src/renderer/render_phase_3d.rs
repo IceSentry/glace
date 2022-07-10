@@ -62,7 +62,6 @@ impl RenderPhase for RenderPhase3d {
 #[derive(Component)]
 pub struct Transparent;
 
-#[allow(clippy::type_complexity)]
 pub struct OpaquePass {
     pub render_pipeline: wgpu::RenderPipeline,
     pub light_render_pipeline: wgpu::RenderPipeline,
@@ -209,23 +208,13 @@ impl OpaquePass {
         {
             // The draw function also uses the instance buffer under the hood it simply is of size 1
             render_pass.set_vertex_buffer(1, instance_buffer.0.slice(..));
-            let transparent = false;
-            if let Some(instances) = instances {
-                model.draw_instanced(
-                    &mut render_pass,
-                    0..instances.0.len() as u32,
-                    gpu_materials,
-                    &mesh_view_bind_group.0,
-                    transparent,
-                );
-            } else {
-                model.draw(
-                    &mut render_pass,
-                    gpu_materials,
-                    &mesh_view_bind_group.0,
-                    transparent,
-                );
-            }
+            model.draw_instanced(
+                &mut render_pass,
+                0..instances.map(|i| i.0.len() as u32).unwrap_or(1),
+                gpu_materials,
+                &mesh_view_bind_group.0,
+                false,
+            );
         }
 
         // TODO I need a better way to identify transparent meshes in a model
@@ -235,23 +224,13 @@ impl OpaquePass {
         {
             // The draw function also uses the instance buffer under the hood it simply is of size 1
             render_pass.set_vertex_buffer(1, instance_buffer.0.slice(..));
-            let transparent = true;
-            if let Some(instances) = instances {
-                model.draw_instanced(
-                    &mut render_pass,
-                    0..instances.0.len() as u32,
-                    gpu_materials,
-                    &mesh_view_bind_group.0,
-                    transparent,
-                );
-            } else {
-                model.draw(
-                    &mut render_pass,
-                    gpu_materials,
-                    &mesh_view_bind_group.0,
-                    transparent,
-                );
-            }
+            model.draw_instanced(
+                &mut render_pass,
+                0..instances.map(|i| i.0.len() as u32).unwrap_or(1),
+                gpu_materials,
+                &mesh_view_bind_group.0,
+                true,
+            );
         }
 
         render_pass.set_pipeline(&self.light_render_pipeline);
