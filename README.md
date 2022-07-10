@@ -14,3 +14,15 @@ It can also be used to showcase integrating a custom renderer to bevy.
 * Load gltf
 * egui integration
 * 3d camera controller
+
+## TODOs
+
+* Model loading UI
+* MSAA
+* Wireframe
+* Use bevy log plugin and tracing
+* PBR
+* Clustered forward rendering
+* Better sorting for transparent phase
+* Use gltf blend mode
+* GI???
