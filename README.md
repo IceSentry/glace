@@ -1,5 +1,7 @@
 # glace
 
+![demo](heltmet.gif)
+
 This is a toy renderer using rust to learn wgpu and computer graphics built with bevy.
 
 It can also be used to showcase integrating a custom renderer to bevy.
