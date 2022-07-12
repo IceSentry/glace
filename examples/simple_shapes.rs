@@ -3,7 +3,6 @@ use bevy::{input::InputPlugin, prelude::*, window::WindowPlugin, winit::WinitPlu
 use glace::{
     camera::CameraSettings,
     egui_plugin::EguiPlugin,
-    image_utils::image_from_color,
     light::Light,
     model::{self, Model},
     renderer::{
@@ -68,19 +67,15 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
 
     let plane = Model {
         meshes: vec![shapes::plane::Plane {
-            resolution: 1,
+            resolution: 5,
             size: 5.0,
         }
         .mesh(&renderer.device)],
         materials: vec![model::Material {
             name: "rock_material".to_string(),
             diffuse_texture,
-            alpha: 1.0,
-            gloss: 1.0,
-            specular: Vec3::new(1.0, 1.0, 1.0),
-            base_color: Color::WHITE.as_rgba_f32().into(),
             normal_texture: Some(normal_texture),
-            specular_texture: None,
+            ..Default::default()
         }],
     };
     commands.spawn_bundle((
@@ -93,7 +88,7 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
 
     let cube = Model {
         meshes: vec![shapes::cube::Cube::new(1.0, 1.0, 1.0).mesh(&renderer.device)],
-        materials: vec![get_default_material(Color::WHITE)],
+        materials: vec![model::Material::from_color(Color::WHITE)],
     };
     commands.spawn_bundle((
         cube,
@@ -105,7 +100,7 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
 
     let sphere = Model {
         meshes: vec![shapes::sphere::UVSphere::default().mesh(&renderer.device)],
-        materials: vec![get_default_material(Color::WHITE)],
+        materials: vec![model::Material::from_color(Color::WHITE)],
     };
     commands.spawn_bundle((
         sphere,
@@ -117,7 +112,7 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
 
     let capsule = Model {
         meshes: vec![shapes::capsule::Capsule::default().mesh(&renderer.device)],
-        materials: vec![get_default_material(Color::WHITE)],
+        materials: vec![model::Material::from_color(Color::WHITE)],
     };
     commands.spawn_bundle((
         capsule,
@@ -126,17 +121,4 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
             ..default()
         },
     ));
-}
-
-fn get_default_material(base_color: Color) -> model::Material {
-    model::Material {
-        name: "default_material".to_string(),
-        diffuse_texture: image_from_color(Color::WHITE),
-        alpha: 1.0,
-        gloss: 1.0,
-        specular: Vec3::new(1.0, 1.0, 1.0),
-        base_color: base_color.as_rgba_f32().into(),
-        normal_texture: None,
-        specular_texture: None,
-    }
 }

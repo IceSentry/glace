@@ -1,7 +1,9 @@
-use crate::{mesh::Mesh, renderer::bind_groups::material::GpuModelMaterials};
+use crate::{
+    image_utils::image_from_color, mesh::Mesh, renderer::bind_groups::material::GpuModelMaterials,
+};
 use bevy::{
     math::{Vec3, Vec4},
-    prelude::Component,
+    prelude::{Color, Component},
 };
 use image::RgbaImage;
 use std::ops::Range;
@@ -74,6 +76,31 @@ pub struct Material {
     pub diffuse_texture: RgbaImage,
     pub normal_texture: Option<RgbaImage>,
     pub specular_texture: Option<RgbaImage>,
+}
+
+impl Default for Material {
+    fn default() -> Self {
+        Self {
+            name: "Default Material".to_string(),
+            base_color: Color::WHITE.as_rgba_f32().into(),
+            alpha: 1.0,
+            gloss: 1.0,
+            specular: Vec3::new(1.0, 1.0, 1.0),
+            diffuse_texture: image_from_color(Color::WHITE),
+            normal_texture: Default::default(),
+            specular_texture: Default::default(),
+        }
+    }
+}
+
+impl Material {
+    pub fn from_color(color: Color) -> Self {
+        Self {
+            name: "Color Material".to_string(),
+            base_color: color.as_rgba_f32().into(),
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Debug)]

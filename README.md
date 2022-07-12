@@ -23,6 +23,7 @@ It can also be used to showcase integrating a custom renderer to bevy.
 * MSAA
 * Wireframe
 * Use bevy log plugin and tracing
+* Use bevy mesh and material abstractions
 * PBR
 * Clustered forward rendering
 * Better sorting for transparent phase
