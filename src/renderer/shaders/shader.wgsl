@@ -65,10 +65,6 @@ struct InstanceInput {
     [[location(9)]] normal_matrix_0: vec3<f32>;
     [[location(10)]] normal_matrix_1: vec3<f32>;
     [[location(11)]] normal_matrix_2: vec3<f32>;
-    [[location(12)]] inverse_transpose_model_matrix_0: vec4<f32>;
-    [[location(13)]] inverse_transpose_model_matrix_1: vec4<f32>;
-    [[location(14)]] inverse_transpose_model_matrix_2: vec4<f32>;
-    [[location(15)]] inverse_transpose_model_matrix_3: vec4<f32>;
 };
 
 struct VertexOutput {
@@ -96,23 +92,6 @@ fn build_normal_matrix(instance: InstanceInput) -> mat3x3<f32> {
         instance.normal_matrix_1,
         instance.normal_matrix_2,
     );
-}
-
-fn build_inverse_transpose_model_matrix(instance: InstanceInput) -> mat4x4<f32> {
-    return mat4x4<f32>(
-        instance.inverse_transpose_model_matrix_0,
-        instance.inverse_transpose_model_matrix_1,
-        instance.inverse_transpose_model_matrix_2,
-        instance.inverse_transpose_model_matrix_3,
-    );
-}
-
-fn mesh_normal_local_to_world(inverse_transpose_model_matrix: mat4x4<f32>, vertex_normal: vec3<f32>) -> vec3<f32> {
-    return mat3x3<f32>(
-        inverse_transpose_model_matrix[0].xyz,
-        inverse_transpose_model_matrix[1].xyz,
-        inverse_transpose_model_matrix[2].xyz
-    ) * vertex_normal;
 }
 
 [[stage(vertex)]]

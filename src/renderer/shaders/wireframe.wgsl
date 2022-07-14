@@ -22,10 +22,6 @@ struct InstanceInput {
     [[location(9)]] normal_matrix_0: vec3<f32>;
     [[location(10)]] normal_matrix_1: vec3<f32>;
     [[location(11)]] normal_matrix_2: vec3<f32>;
-    [[location(12)]] inverse_transpose_model_matrix_0: vec4<f32>;
-    [[location(13)]] inverse_transpose_model_matrix_1: vec4<f32>;
-    [[location(14)]] inverse_transpose_model_matrix_2: vec4<f32>;
-    [[location(15)]] inverse_transpose_model_matrix_3: vec4<f32>;
 };
 
 

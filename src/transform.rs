@@ -5,7 +5,6 @@ use bevy::{math::Mat3, prelude::Transform};
 pub struct TransformRaw {
     model: [[f32; 4]; 4],
     normal: [[f32; 3]; 3],
-    inverse_transpose_model: [[f32; 4]; 4],
 }
 
 pub fn to_raw(transform: &Transform) -> TransformRaw {
@@ -13,13 +12,12 @@ pub fn to_raw(transform: &Transform) -> TransformRaw {
     TransformRaw {
         model: model.to_cols_array_2d(),
         normal: Mat3::from_quat(transform.rotation).to_cols_array_2d(),
-        inverse_transpose_model: model.inverse().transpose().to_cols_array_2d(),
     }
 }
 
 impl TransformRaw {
     pub fn layout<'a>() -> wgpu::VertexBufferLayout<'a> {
-        const ATTRIBUTESS: [wgpu::VertexAttribute; 11] = wgpu::vertex_attr_array![
+        const ATTRIBUTESS: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
             // A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a slot
             // for each vec4. We'll have to reassemble the mat4 in
             // the shader.
@@ -33,11 +31,6 @@ impl TransformRaw {
             9  => Float32x3,
             10 => Float32x3,
             11 => Float32x3,
-            // inverse_transpose_model
-            12 => Float32x4,
-            13 => Float32x4,
-            14 => Float32x4,
-            15 => Float32x4,
         ];
 
         wgpu::VertexBufferLayout {
