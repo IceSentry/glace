@@ -1,24 +1,4 @@
-use bevy::{
-    math::{Mat3, Mat4, Quat, Vec3},
-    prelude::Component,
-};
-
-#[derive(Component)]
-pub struct Transform {
-    pub translation: Vec3,
-    pub rotation: Quat,
-    pub scale: Vec3,
-}
-
-impl Default for Transform {
-    fn default() -> Self {
-        Self {
-            rotation: Quat::default(),
-            translation: Vec3::ZERO,
-            scale: Vec3::ONE,
-        }
-    }
-}
+use bevy::{math::Mat3, prelude::Transform};
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -28,15 +8,12 @@ pub struct TransformRaw {
     inverse_transpose_model: [[f32; 4]; 4],
 }
 
-impl Transform {
-    pub fn to_raw(&self) -> TransformRaw {
-        let model =
-            Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.translation);
-        TransformRaw {
-            model: model.to_cols_array_2d(),
-            normal: Mat3::from_quat(self.rotation).to_cols_array_2d(),
-            inverse_transpose_model: model.inverse().transpose().to_cols_array_2d(),
-        }
+pub fn to_raw(transform: &Transform) -> TransformRaw {
+    let model = transform.compute_matrix();
+    TransformRaw {
+        model: model.to_cols_array_2d(),
+        normal: Mat3::from_quat(transform.rotation).to_cols_array_2d(),
+        inverse_transpose_model: model.inverse().transpose().to_cols_array_2d(),
     }
 }
 

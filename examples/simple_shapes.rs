@@ -10,7 +10,6 @@ use glace::{
         WgpuRenderer,
     },
     shapes,
-    transform::Transform,
 };
 
 const LIGHT_POSITION: Vec3 = Vec3::from_array([2.0, 2.0, 2.0]);

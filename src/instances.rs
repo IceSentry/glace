@@ -1,7 +1,9 @@
-use bevy::prelude::{Added, Changed, Commands, Component, Entity, Or, Query, Res, With, Without};
+use bevy::prelude::{
+    Added, Changed, Commands, Component, Entity, Or, Query, Res, Transform, With, Without,
+};
 use wgpu::util::DeviceExt;
 
-use crate::{model::Model, renderer::WgpuRenderer, transform::Transform};
+use crate::{model::Model, renderer::WgpuRenderer, transform::to_raw};
 
 #[derive(Component)]
 pub struct InstanceBuffer(pub wgpu::Buffer);
@@ -31,9 +33,9 @@ pub fn create_instance_buffer(
 ) {
     for (entity, transform, instances) in query.iter() {
         let instance_data = if let Some(transform) = transform {
-            vec![transform.to_raw()]
+            vec![to_raw(transform)]
         } else if let Some(instances) = instances {
-            instances.0.iter().map(Transform::to_raw).collect()
+            instances.0.iter().map(to_raw).collect()
         } else {
             log::warn!("Trying to create instance buffer without Transform or Instances");
             continue;
@@ -66,9 +68,9 @@ pub fn update_instance_buffer(
 ) {
     for (buffer, transform, instances) in query.iter() {
         let data: Vec<_> = if let Some(t) = transform {
-            vec![Transform::to_raw(t)]
+            vec![to_raw(t)]
         } else if let Some(instances) = instances {
-            instances.0.iter().map(Transform::to_raw).collect()
+            instances.0.iter().map(to_raw).collect()
         } else {
             unreachable!();
         };

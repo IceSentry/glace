@@ -13,7 +13,7 @@ opt-level = 3
 wgpu = "0.12"
 env_logger = "0.9"
 winit = "0.26.1"
-bevy = { git = "https://github.com/bevyengine/bevy", rev = "518408dfdaa8884ba86a71512de2a7d57848413d" }
+bevy = { git = "https://github.com/bevyengine/bevy" }
 log = "0.4"
 bytemuck = { version = "1.7", features = ["derive"] }
 image = "0.24"

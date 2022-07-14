@@ -16,6 +16,7 @@ pub struct Model {
 }
 
 impl Model {
+    #[allow(unused)]
     pub fn draw<'a>(
         &'a self,
         render_pass: &mut wgpu::RenderPass<'a>,
@@ -94,6 +95,7 @@ impl Default for Material {
 }
 
 impl Material {
+    #[allow(unused)]
     pub fn from_color(color: Color) -> Self {
         Self {
             name: "Color Material".to_string(),

@@ -22,7 +22,6 @@ use crate::{
     renderer::{
         plugin::WgpuRendererPlugin, render_phase_3d::RenderPhase3dDescriptor, WgpuRenderer,
     },
-    transform::Transform,
 };
 
 mod camera;

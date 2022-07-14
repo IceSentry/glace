@@ -13,7 +13,6 @@ use glace::{
         plugin::WgpuRendererPlugin, render_phase_3d::RenderPhase3dDescriptor, WgpuRenderer,
     },
     shapes,
-    transform::Transform,
 };
 
 const LIGHT_POSITION: Vec3 = Vec3::from_array([4.0, 4.0, 2.0]);
