@@ -70,6 +70,6 @@ impl Plane {
         };
         mesh.compute_tangents();
 
-        ModelMesh::from_mesh("capsule", device, &mesh)
+        ModelMesh::from_mesh("plane", device, &mesh)
     }
 }
