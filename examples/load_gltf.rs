@@ -44,8 +44,6 @@ fn main() {
 }
 
 fn spawn_gltf(mut commands: Commands, asset_server: Res<AssetServer>) {
-    log::info!("Loading gltfs");
-
     commands
         .spawn_bundle(GltfBundle {
             gltf: asset_server.load("models/gltf/FlightHelmet/FlightHelmet.gltf"),

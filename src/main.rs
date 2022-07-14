@@ -41,7 +41,8 @@ mod transform;
 const LIGHT_POSITION: Vec3 = Vec3::from_array([2.0, 2.0, 0.0]);
 // const GLTF_MODEL_NAME: &str = "";
 
-const GLTF_MODEL_NAME: &str = "models/gltf/sponza/Sponza.gltf";
+// const GLTF_MODEL_NAME: &str = "models/gltf/sponza/Sponza.gltf";
+const GLTF_MODEL_NAME: &str = "models/gltf/bistro/exterior/bistro_exterior.gltf";
 // const OBJ_MODEL_NAME: &str = "models/obj/large_obj/sponza/sponza.obj";
 const SCALE: Vec3 = Vec3::from_array([0.025, 0.025, 0.025]);
 
@@ -142,16 +143,6 @@ fn spawn_gltf(mut commands: Commands, asset_server: Res<AssetServer>) {
             // translation: Vec3::new(2.0, 0.0, 0.0),
             ..default()
         });
-
-    // commands
-    //     .spawn_bundle(ObjBundle {
-    //         obj: asset_server.load(OBJ_MODEL_NAME),
-    //     })
-    //     .insert(Transform {
-    //         scale: SCALE,
-    //         // translation: Vec3::new(2.0, 0.0, 0.0),
-    //         ..default()
-    //     });
 }
 
 fn update_window_title(time: Res<Time>, mut windows: ResMut<Windows>) {

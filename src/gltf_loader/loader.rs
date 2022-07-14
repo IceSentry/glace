@@ -70,7 +70,10 @@ fn load_textures<'a>(
 fn load_materials(gltf: &gltf::Gltf, textures: HashMap<usize, RgbaImage>) -> Vec<Material> {
     let mut materials = vec![];
     for material in gltf.materials() {
-        log::info!("loading material: {:?}", material.name());
+        log::info!(
+            "loading material: {:?}",
+            material.name().unwrap_or("Unknown Material Name")
+        );
 
         // The base color texture.
         // The first three components (RGB) MUST be encoded with the sRGB transfer function.
@@ -231,8 +234,10 @@ async fn load_texture<'a>(
         gltf::image::Source::Uri { uri, .. } => {
             let image_path = load_context.path().parent().unwrap().join(uri);
             log::info!("loading texture {image_path:?}");
-            let bytes = load_context.read_asset_bytes(image_path).await?;
-            image::load_from_memory(&bytes)?.to_rgba8()
+            let bytes = load_context.read_asset_bytes(image_path.clone()).await?;
+            let rgb = image::load_from_memory(&bytes)?.to_rgba8();
+            log::info!("finished loading texture {image_path:?}");
+            rgb
         }
     })
 }
