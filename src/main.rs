@@ -5,7 +5,7 @@ use bevy::{
     app::AppExit,
     asset::AssetPlugin,
     input::{Input, InputPlugin},
-    math::{const_vec3, Quat, Vec3},
+    math::{Quat, Vec3},
     prelude::*,
     window::{CursorMoved, WindowDescriptor, WindowPlugin, Windows},
     winit::WinitPlugin,
@@ -43,6 +43,7 @@ const LIGHT_POSITION: Vec3 = Vec3::from_array([2.0, 2.0, 0.0]);
 // const GLTF_MODEL_NAME: &str = "";
 
 const GLTF_MODEL_NAME: &str = "models/gltf/sponza/Sponza.gltf";
+// const OBJ_MODEL_NAME: &str = "models/obj/large_obj/sponza/sponza.obj";
 const SCALE: Vec3 = Vec3::from_array([0.025, 0.025, 0.025]);
 
 // const GLTF_MODEL_NAME: &str = "models/gltf/FlightHelmet/FlightHelmet.gltf";
@@ -103,6 +104,7 @@ fn main() {
         .add_plugin(ObjLoaderPlugin)
         .add_plugin(EguiPlugin)
         .add_plugin(GltfLoaderPlugin)
+        .add_plugin(ObjLoaderPlugin)
         .add_startup_system(spawn_light)
         .add_startup_system(spawn_gltf)
         .add_system(update_window_title)
@@ -132,8 +134,6 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
 }
 
 fn spawn_gltf(mut commands: Commands, asset_server: Res<AssetServer>) {
-    log::info!("Loading gltfs");
-
     commands
         .spawn_bundle(GltfBundle {
             gltf: asset_server.load(GLTF_MODEL_NAME),
@@ -143,6 +143,16 @@ fn spawn_gltf(mut commands: Commands, asset_server: Res<AssetServer>) {
             // translation: Vec3::new(2.0, 0.0, 0.0),
             ..default()
         });
+
+    // commands
+    //     .spawn_bundle(ObjBundle {
+    //         obj: asset_server.load(OBJ_MODEL_NAME),
+    //     })
+    //     .insert(Transform {
+    //         scale: SCALE,
+    //         // translation: Vec3::new(2.0, 0.0, 0.0),
+    //         ..default()
+    //     });
 }
 
 fn update_window_title(time: Res<Time>, mut windows: ResMut<Windows>) {

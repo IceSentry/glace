@@ -14,6 +14,7 @@ use super::{
     bind_groups::{self, mesh_view::CameraUniform},
     depth_pass::DepthPass,
     render_phase_3d::{DepthTexture, RenderPhase3d},
+    wireframe::WireframePhase,
 };
 
 pub struct WgpuRendererPlugin;
@@ -30,6 +31,10 @@ impl Plugin for WgpuRendererPlugin {
                 SystemStage::parallel(),
             )
             .add_startup_system_to_stage("init_render_phase", init_render_phase.exclusive_system())
+            .add_startup_system_to_stage(
+                "init_render_phase",
+                init_wireframe_phase.exclusive_system(),
+            )
             .add_startup_system(init_depth_pass)
             .add_startup_system_to_stage(
                 // Needs to be in PostStartup because it sets up the bind_group based on
@@ -46,6 +51,12 @@ impl Plugin for WgpuRendererPlugin {
             .add_system_to_stage(
                 CoreStage::PostUpdate,
                 update_render_phase::<EguiRenderPhase>
+                    .exclusive_system()
+                    .before("render"),
+            )
+            .add_system_to_stage(
+                CoreStage::PostUpdate,
+                update_render_phase::<WireframePhase>
                     .exclusive_system()
                     .before("render"),
             )
@@ -80,6 +91,11 @@ fn init_renderer(
 fn init_render_phase(world: &mut World) {
     // TODO look into FromWorld
     let render_phase_3d = RenderPhase3d::from_world(world);
+    world.insert_resource(render_phase_3d);
+}
+
+fn init_wireframe_phase(world: &mut World) {
+    let render_phase_3d = WireframePhase::from_world(world);
     world.insert_resource(render_phase_3d);
 }
 

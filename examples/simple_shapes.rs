@@ -6,7 +6,8 @@ use glace::{
     light::Light,
     model::{self, Model},
     renderer::{
-        plugin::WgpuRendererPlugin, render_phase_3d::RenderPhase3dDescriptor, WgpuRenderer,
+        plugin::WgpuRendererPlugin, render_phase_3d::RenderPhase3dDescriptor, wireframe::Wireframe,
+        WgpuRenderer,
     },
     shapes,
     transform::Transform,
@@ -114,11 +115,13 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
         meshes: vec![shapes::capsule::Capsule::default().mesh(&renderer.device)],
         materials: vec![model::Material::from_color(Color::WHITE)],
     };
-    commands.spawn_bundle((
-        capsule,
-        Transform {
-            translation: Vec3::ZERO + (Vec3::X * 1.5),
-            ..default()
-        },
-    ));
+    commands
+        .spawn_bundle((
+            capsule,
+            Transform {
+                translation: Vec3::ZERO + (Vec3::X * 1.5),
+                ..default()
+            },
+        ))
+        .insert(Wireframe);
 }
