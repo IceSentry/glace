@@ -66,22 +66,41 @@ fn load_textures<'a>(
         .collect()
 }
 
+// TODO this should use asset handles instead of storing the raw textures
 fn load_materials(gltf: &gltf::Gltf, textures: HashMap<usize, RgbaImage>) -> Vec<Material> {
     let mut materials = vec![];
     for material in gltf.materials() {
         log::info!("loading material: {:?}", material.name());
-        let base_color_texture =
-            if let Some(info) = material.pbr_metallic_roughness().base_color_texture() {
-                // TODO this should use an asset handle instead
-                textures[&info.texture().index()].clone()
-            } else {
-                image_from_color(Color::WHITE)
-            };
-        // let base_color_texture = image_from_color(Color::CYAN);
-        let base_color = material.pbr_metallic_roughness().base_color_factor();
-        let metallic = material.pbr_metallic_roughness().metallic_factor();
-        let metallic_roughness_texture = material
+
+        // The base color texture.
+        // The first three components (RGB) MUST be encoded with the sRGB transfer function.
+        // They specify the base color of the material. If the fourth component (A) is present,
+        // it represents the linear alpha coverage of the material. Otherwise, the alpha coverage
+        // is equal to 1.0. The material.alphaMode property specifies how alpha is interpreted.
+        // The stored texels MUST NOT be premultiplied.
+        let base_color_texture = material
             .pbr_metallic_roughness()
+            .base_color_texture()
+            .map(|info| textures[&info.texture().index()].clone())
+            // When undefined, the texture MUST be sampled as having 1.0 in all components.
+            .unwrap_or_else(|| image_from_color(Color::WHITE));
+
+        let pbr_metallic_roughness = material.pbr_metallic_roughness();
+
+        // The factors for the base color of the material.
+        // This value defines linear multipliers for the sampled texels of the base color texture.
+        let base_color = pbr_metallic_roughness.base_color_factor();
+
+        // The factor for the metalness of the material.
+        // This value defines a linear multiplier for the sampled metalness values of the metallic-roughness texture.
+        let metallic = pbr_metallic_roughness.metallic_factor();
+
+        // The metallic-roughness texture.
+        // The metalness values are sampled from the B channel. The roughness values are sampled from the G channel.
+        // These values MUST be encoded with a linear transfer function. If other channels are present (R or A),
+        // they MUST be ignored for metallic-roughness calculations. When undefined, the texture MUST be sampled as
+        // having 1.0 in G and B components.
+        let metallic_roughness_texture = pbr_metallic_roughness
             .metallic_roughness_texture()
             .map(|info| textures[&info.texture().index()].clone());
         let normal_texture = material
