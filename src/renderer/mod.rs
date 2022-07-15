@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use wgpu::util::DeviceExt;
 use wgpu::CommandEncoder;
 use winit::window::Window;
 
