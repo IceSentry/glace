@@ -165,7 +165,7 @@ impl WireframePhase {
                         depth_compare: wgpu::CompareFunction::Less,
                         stencil: wgpu::StencilState::default(),
                         bias: wgpu::DepthBiasState {
-                            // slope_scale: 1.0,
+                            slope_scale: -1.0,
                             ..default()
                         },
                     })
