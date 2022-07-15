@@ -128,6 +128,14 @@ impl WgpuRenderer {
     }
 
     pub fn render(&self, world: &World) -> anyhow::Result<()> {
+        if world
+            .get_resource::<Windows>()
+            .and_then(|w| w.get_primary())
+            .is_none()
+        {
+            return Ok(());
+        }
+
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture

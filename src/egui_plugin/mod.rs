@@ -101,14 +101,15 @@ fn begin_frame(
     windows: Res<Windows>,
     winit_windows: NonSendMut<WinitWindows>,
 ) {
-    let winit_window = winit_windows
-        .get_window(windows.primary().id())
-        .expect("winit window not found");
-    ctx.begin_frame(winit_state.0.take_egui_input(winit_window));
+    if let Some(window) = windows.get_primary() {
+        let winit_window = winit_windows
+            .get_window(window.id())
+            .expect("winit window not found");
+        ctx.begin_frame(winit_state.0.take_egui_input(winit_window));
+    }
 }
 
 impl<'w> RenderPhase for EguiRenderPhase<'w> {
-    #[allow(clippy::type_complexity)]
     fn update(&mut self, world: &mut World) {
         // TODO look if WorldQuery could help simplify this a bit
 
@@ -131,9 +132,13 @@ impl<'w> RenderPhase for EguiRenderPhase<'w> {
 
         self.paint_jobs = egui_ctx.tessellate(shapes);
 
-        let window = winit_windows
-            .get_window(windows.primary().id())
-            .expect("Failed to get primary window");
+        let window = if let Some(window) = windows.get_primary() {
+            winit_windows
+                .get_window(window.id())
+                .expect("Failed to get primary window")
+        } else {
+            return;
+        };
 
         platform
             .0
@@ -168,6 +173,12 @@ fn handle_mouse_events(
     ctx: ResMut<egui::Context>,
     windows: Res<Windows>,
 ) {
+    let window_height = if let Some(window) = windows.get_primary() {
+        window.physical_height()
+    } else {
+        return;
+    };
+
     for ev in cursor_moved_events.iter() {
         platform.0.on_event(
             &ctx,
@@ -176,10 +187,10 @@ fn handle_mouse_events(
                 modifiers: ModifiersState::empty(),
                 position: winit::dpi::PhysicalPosition {
                     x: ev.position.x as f64,
-                    y: if ev.position.y as u32 > windows.primary().physical_height() {
+                    y: if ev.position.y as u32 > window_height {
                         0.0
                     } else {
-                        (windows.primary().physical_height() - ev.position.y as u32) as f64
+                        (window_height - ev.position.y as u32) as f64
                     },
                 },
             },
