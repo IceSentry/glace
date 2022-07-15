@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use wgpu::util::DeviceExt;
 use wgpu::CommandEncoder;
 use winit::window::Window;
 
@@ -123,7 +124,7 @@ impl WgpuRenderer {
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
         } else {
-            log::warn!("size is too small")
+            log::info!("window has been minimized")
         }
     }
 
@@ -136,7 +137,17 @@ impl WgpuRenderer {
             return Ok(());
         }
 
-        let output = self.surface.get_current_texture()?;
+        let output = match self.surface.get_current_texture() {
+            Ok(swap_chain_frame) => swap_chain_frame,
+            Err(wgpu::SurfaceError::Outdated) => {
+                self.surface.configure(&self.device, &self.config);
+                self.surface
+                    .get_current_texture()
+                    .expect("Failed to reconfigure surface")
+            }
+            err => err?,
+        };
+
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
