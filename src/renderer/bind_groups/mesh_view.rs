@@ -3,16 +3,20 @@ use wgpu::util::DeviceExt;
 
 use crate::{camera::Camera, light::Light, renderer::WgpuRenderer};
 
+#[derive(Resource)]
 pub struct CameraBuffer(pub wgpu::Buffer);
 
+#[derive(Resource)]
 pub struct LightBuffer(pub wgpu::Buffer);
 
+#[derive(Resource)]
 pub struct MeshViewBindGroup(pub wgpu::BindGroup);
 
+#[derive(Resource)]
 pub struct MeshViewBindGroupLayout(pub wgpu::BindGroupLayout);
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Resource)]
 pub struct CameraUniform {
     view_position: [f32; 4],
     view_proj: [[f32; 4]; 4],

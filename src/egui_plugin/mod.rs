@@ -1,3 +1,5 @@
+use self::custom_egui_winit::EguiWinitState;
+use crate::renderer::{RenderPhase, WgpuRenderer};
 use bevy::{
     app::AppExit,
     ecs::system::SystemState,
@@ -6,28 +8,34 @@ use bevy::{
     window::WindowCloseRequested,
     winit::WinitWindows,
 };
-use winit::event::{DeviceId, ModifiersState};
 
-use crate::renderer::{RenderPhase, WgpuRenderer};
+mod custom_egui_winit;
 
-pub struct EguiPlugin;
+#[derive(Resource)]
+pub struct EguiCtxRes(pub egui::Context);
 
+#[derive(Resource)]
+pub struct EguiScreenDesciptorRes(pub egui_wgpu::renderer::ScreenDescriptor);
+
+#[derive(Resource)]
+struct EguiRenderPassRes(egui_wgpu::renderer::RenderPass);
+
+#[derive(Resource)]
+#[allow(clippy::type_complexity)]
 pub struct EguiRenderPhase<'w> {
-    #[allow(clippy::type_complexity)]
     state: SystemState<(
         Res<'w, WgpuRenderer>,
-        Res<'w, egui_wgpu::renderer::ScreenDescriptor>,
-        NonSend<'w, egui::Context>,
-        NonSendMut<'w, egui_wgpu::renderer::RenderPass>,
-        ResMut<'w, EguiWinitPlatform>,
+        Res<'w, EguiScreenDesciptorRes>,
+        NonSend<'w, EguiCtxRes>,
+        NonSendMut<'w, EguiRenderPassRes>,
+        ResMut<'w, EguiWinitState>,
         Res<'w, Windows>,
         NonSend<'w, WinitWindows>,
     )>,
     paint_jobs: Vec<egui::ClippedPrimitive>,
 }
 
-struct EguiWinitPlatform(egui_winit::State);
-
+pub struct EguiPlugin;
 impl Plugin for EguiPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(setup)
@@ -42,10 +50,10 @@ impl Plugin for EguiPlugin {
 fn on_exit(
     exit: EventReader<AppExit>,
     window_close: EventReader<WindowCloseRequested>,
-    egui_ctx: Res<egui::Context>,
+    egui_ctx: Res<EguiCtxRes>,
 ) {
     if !exit.is_empty() || !window_close.is_empty() {
-        let mem = egui_ctx.memory().clone();
+        let mem = egui_ctx.0.memory().clone();
         std::fs::write(
             "egui.ron",
             ron::ser::to_string_pretty(&mem, ron::ser::PrettyConfig::new())
@@ -61,12 +69,8 @@ fn setup(mut commands: Commands, windows: Res<Windows>) {
         size_in_pixels: [window.width() as u32, window.height() as u32],
         pixels_per_point: window.scale_factor() as f32,
     };
-    commands.insert_resource(screen_descriptor);
-
-    // This function is pretty poorly named.
-    // Not sure what happens on linux when you pass it None, but it works on windows
-    let platform = egui_winit::State::new_with_wayland_display(None);
-    commands.insert_resource(EguiWinitPlatform(platform));
+    commands.insert_resource(EguiScreenDesciptorRes(screen_descriptor));
+    commands.insert_resource(EguiWinitState::new());
 
     let ctx = egui::Context::default();
     if let Ok(mem) = std::fs::read_to_string("egui.ron") {
@@ -74,7 +78,7 @@ fn setup(mut commands: Commands, windows: Res<Windows>) {
         ctx.memory().clone_from(&mem);
     }
 
-    commands.insert_resource(ctx);
+    commands.insert_resource(EguiCtxRes(ctx));
 }
 
 fn setup_render_pass(world: &mut World) {
@@ -84,7 +88,7 @@ fn setup_render_pass(world: &mut World) {
         wgpu::TextureFormat::Bgra8UnormSrgb,
         1,
     );
-    world.insert_non_send_resource(pass);
+    world.insert_non_send_resource(EguiRenderPassRes(pass));
 }
 
 fn setup_render_phase(world: &mut World) {
@@ -96,8 +100,8 @@ fn setup_render_phase(world: &mut World) {
 }
 
 fn begin_frame(
-    ctx: Res<egui::Context>,
-    mut winit_state: ResMut<EguiWinitPlatform>,
+    ctx: Res<EguiCtxRes>,
+    mut winit_state: ResMut<EguiWinitState>,
     windows: Res<Windows>,
     winit_windows: NonSendMut<WinitWindows>,
 ) {
@@ -105,7 +109,7 @@ fn begin_frame(
         let winit_window = winit_windows
             .get_window(window.id())
             .expect("winit window not found");
-        ctx.begin_frame(winit_state.0.take_egui_input(winit_window));
+        ctx.0.begin_frame(winit_state.take_egui_input(winit_window));
     }
 }
 
@@ -128,9 +132,9 @@ impl<'w> RenderPhase for EguiRenderPhase<'w> {
             textures_delta,
             platform_output,
             ..
-        } = egui_ctx.end_frame();
+        } = egui_ctx.0.end_frame();
 
-        self.paint_jobs = egui_ctx.tessellate(shapes);
+        self.paint_jobs = egui_ctx.0.tessellate(shapes);
 
         let window = if let Some(window) = windows.get_primary() {
             winit_windows
@@ -140,27 +144,29 @@ impl<'w> RenderPhase for EguiRenderPhase<'w> {
             return;
         };
 
-        platform
-            .0
-            .handle_platform_output(window, &egui_ctx, platform_output);
+        platform.handle_platform_output(window, &egui_ctx.0, platform_output);
 
         for (id, image_delta) in textures_delta.set {
-            render_pass.update_texture(&renderer.device, &renderer.queue, id, &image_delta);
+            render_pass
+                .0
+                .update_texture(&renderer.device, &renderer.queue, id, &image_delta);
         }
 
-        render_pass.update_buffers(
+        render_pass.0.update_buffers(
             &renderer.device,
             &renderer.queue,
             &self.paint_jobs,
-            &screen_descriptor,
+            &screen_descriptor.0,
         );
     }
 
     fn render(&self, world: &World, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {
-        let screen_descriptor = world.resource::<egui_wgpu::renderer::ScreenDescriptor>();
-        let render_pass = world.non_send_resource::<egui_wgpu::renderer::RenderPass>();
+        let screen_descriptor = world.resource::<EguiScreenDesciptorRes>();
+        let render_pass = world.non_send_resource::<EguiRenderPassRes>();
 
-        render_pass.execute(encoder, view, &self.paint_jobs, screen_descriptor, None)
+        render_pass
+            .0
+            .execute(encoder, view, &self.paint_jobs, &screen_descriptor.0, None)
     }
 }
 
@@ -169,8 +175,8 @@ fn handle_mouse_events(
     mut mouse_button_input_events: EventReader<MouseButtonInput>,
     mut cursor_moved_events: EventReader<CursorMoved>,
     mut mouse_wheel_events: EventReader<MouseWheel>,
-    mut platform: ResMut<EguiWinitPlatform>,
-    ctx: ResMut<egui::Context>,
+    mut platform: ResMut<EguiWinitState>,
+    ctx: ResMut<EguiCtxRes>,
     windows: Res<Windows>,
 ) {
     let window_height = if let Some(window) = windows.get_primary() {
@@ -180,11 +186,11 @@ fn handle_mouse_events(
     };
 
     for ev in cursor_moved_events.iter() {
-        platform.0.on_event(
-            &ctx,
+        platform.on_event(
+            &ctx.0,
             &winit::event::WindowEvent::CursorMoved {
-                device_id: unsafe { DeviceId::dummy() },
-                modifiers: ModifiersState::empty(),
+                device_id: unsafe { winit::event::DeviceId::dummy() },
+                modifiers: winit::event::ModifiersState::empty(),
                 position: winit::dpi::PhysicalPosition {
                     x: ev.position.x as f64,
                     y: if ev.position.y as u32 > window_height {
@@ -198,11 +204,11 @@ fn handle_mouse_events(
     }
 
     for ev in mouse_button_input_events.iter() {
-        platform.0.on_event(
-            &ctx,
+        platform.on_event(
+            &ctx.0,
             &winit::event::WindowEvent::MouseInput {
-                device_id: unsafe { DeviceId::dummy() },
-                modifiers: ModifiersState::empty(),
+                device_id: unsafe { winit::event::DeviceId::dummy() },
+                modifiers: winit::event::ModifiersState::empty(),
                 state: match ev.state {
                     bevy::input::ButtonState::Pressed => winit::event::ElementState::Pressed,
                     bevy::input::ButtonState::Released => winit::event::ElementState::Released,
@@ -218,11 +224,11 @@ fn handle_mouse_events(
     }
 
     for ev in mouse_wheel_events.iter() {
-        platform.0.on_event(
-            &ctx,
+        platform.on_event(
+            &ctx.0,
             &winit::event::WindowEvent::MouseWheel {
-                device_id: unsafe { DeviceId::dummy() },
-                modifiers: ModifiersState::empty(),
+                device_id: unsafe { winit::event::DeviceId::dummy() },
+                modifiers: winit::event::ModifiersState::empty(),
                 phase: winit::event::TouchPhase::Moved,
                 delta: match ev.unit {
                     bevy::input::mouse::MouseScrollUnit::Line => {

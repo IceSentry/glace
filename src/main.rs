@@ -11,6 +11,7 @@ use bevy::{
     winit::WinitPlugin,
     MinimalPlugins,
 };
+use egui_plugin::EguiCtxRes;
 
 use crate::{
     camera::CameraSettings,
@@ -40,15 +41,19 @@ mod transform;
 
 const LIGHT_POSITION: Vec3 = Vec3::from_array([2.0, 2.0, 0.0]);
 
+#[derive(Resource)]
 struct LightSettings {
     rotate: bool,
     color: [f32; 3],
     speed: f32,
 }
 
+#[derive(Resource)]
 struct GlobalMaterialSettings {
     gloss: f32,
 }
+
+#[derive(Resource)]
 struct InstanceSettings {
     move_instances: bool,
 }
@@ -184,7 +189,7 @@ fn update_materials(mut query: Query<&mut Model>, settings: Res<GlobalMaterialSe
 
 fn settings_ui(
     mut commands: Commands,
-    ctx: Res<egui::Context>,
+    ctx: Res<EguiCtxRes>,
     asset_server: Res<AssetServer>,
     mut camera_settings: ResMut<CameraSettings>,
     mut light_settings: ResMut<LightSettings>,
@@ -196,7 +201,7 @@ fn settings_ui(
     egui::Window::new("Settings")
         .resizable(true)
         .collapsible(true)
-        .show(&ctx, |ui| {
+        .show(&ctx.0, |ui| {
             ui.heading("Camera");
             ui.label("Speed");
             ui.add(egui::Slider::new(&mut camera_settings.speed, 1.0..=20.0).step_by(0.5));
@@ -245,7 +250,7 @@ fn settings_ui(
     egui::Window::new("Spawner")
         .resizable(true)
         .collapsible(true)
-        .show(&ctx, |ui| {
+        .show(&ctx.0, |ui| {
             if ui.button("spawn sponza").clicked() {
                 spawn_gltf("sponza/Sponza.gltf", Vec3::new(0.025, 0.025, 0.025))
             }

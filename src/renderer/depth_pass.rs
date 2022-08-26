@@ -1,5 +1,8 @@
 use crate::{renderer::WgpuRenderer, texture::Texture};
-use bevy::render::render_resource::{encase, ShaderType};
+use bevy::{
+    prelude::Resource,
+    render::render_resource::{encase, ShaderType},
+};
 use wgpu::util::DeviceExt;
 
 const DEFAULT_NEAR: f32 = 0.1;
@@ -61,6 +64,7 @@ struct DepthPassMaterial {
     far: f32,
 }
 
+#[derive(Resource)]
 pub struct DepthPass {
     layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
@@ -141,14 +145,14 @@ impl DepthPass {
     pub fn render(&self, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Depth Visual Render Pass"),
-            color_attachments: &[wgpu::RenderPassColorAttachment {
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,
                     store: true,
                 },
-            }],
+            })],
             depth_stencil_attachment: None,
         });
         render_pass.set_pipeline(&self.render_pipeline);

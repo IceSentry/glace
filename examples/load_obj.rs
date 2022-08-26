@@ -4,7 +4,7 @@ use bevy::{
 
 use glace::{
     camera::CameraSettings,
-    egui_plugin::EguiPlugin,
+    egui_plugin::{EguiCtxRes, EguiPlugin},
     instances::Instances,
     light::Light,
     model::Model,
@@ -37,6 +37,7 @@ const SCALE: Vec3 = Vec3::from_array([0.025, 0.025, 0.025]);
 const INSTANCED_MODEL_NAME: &str = "models/obj/cube/cube.obj";
 const INSTANCED_SCALE: Vec3 = Vec3::from_array([1.0, 1.0, 1.0]);
 
+#[derive(Resource)]
 struct InstanceSettings {
     move_instances: bool,
 }
@@ -187,14 +188,14 @@ fn update_light(mut query: Query<&mut Light>, time: Res<Time>) {
 }
 
 fn settings_ui(
-    ctx: Res<egui::Context>,
+    ctx: Res<EguiCtxRes>,
     mut camera_settings: ResMut<CameraSettings>,
     mut instance_settings: ResMut<InstanceSettings>,
 ) {
     egui::Window::new("Settings")
         .resizable(true)
         .collapsible(true)
-        .show(&ctx, |ui| {
+        .show(&ctx.0, |ui| {
             ui.heading("Camera");
 
             ui.label("Speed");

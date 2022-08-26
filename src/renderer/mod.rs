@@ -18,6 +18,7 @@ pub trait RenderPhase {
     fn render(&self, world: &World, view: &wgpu::TextureView, encoder: &mut CommandEncoder);
 }
 
+#[derive(Resource)]
 pub struct WgpuRenderer {
     pub surface: wgpu::Surface,
     pub device: wgpu::Device,
@@ -55,7 +56,7 @@ impl WgpuRenderer {
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface.get_preferred_format(&adapter).unwrap(),
+            format: surface.get_supported_formats(&adapter)[0],
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Immediate,
@@ -82,7 +83,7 @@ impl WgpuRenderer {
     ) -> wgpu::RenderPipeline {
         let shader = self
             .device
-            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some(&format!("{label} Shader")),
                 source: wgpu::ShaderSource::Wgsl(shader.into()),
             });
@@ -98,11 +99,11 @@ impl WgpuRenderer {
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
                     entry_point: "fragment",
-                    targets: &[wgpu::ColorTargetState {
+                    targets: &[Some(wgpu::ColorTargetState {
                         format: self.config.format,
                         blend: Some(blend),
                         write_mask: wgpu::ColorWrites::ALL,
-                    }],
+                    })],
                 }),
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,

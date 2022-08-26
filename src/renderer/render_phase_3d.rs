@@ -1,4 +1,4 @@
-use bevy::prelude::{Color, Component, QueryState, With, Without, World};
+use bevy::prelude::{Color, Component, QueryState, Resource, With, Without, World};
 use wgpu::CommandEncoder;
 
 use crate::{
@@ -20,14 +20,16 @@ use super::{
     RenderPhase, WgpuRenderer,
 };
 
+#[derive(Resource)]
 pub struct DepthTexture(pub Texture);
 
-#[derive(Default)]
+#[derive(Default, Resource)]
 pub struct RenderPhase3dDescriptor {
     pub clear_color: Color,
     pub show_depth_buffer: bool,
 }
 
+#[derive(Resource)]
 pub struct RenderPhase3d {
     pub opaque_pass: OpaquePass,
 }
@@ -178,7 +180,7 @@ impl OpaquePass {
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Opaque Render Pass"),
-            color_attachments: &[wgpu::RenderPassColorAttachment {
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view,
                 resolve_target: None,
                 ops: wgpu::Operations {
@@ -190,7 +192,7 @@ impl OpaquePass {
                     }),
                     store: true,
                 },
-            }],
+            })],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &depth_texture.0.view,
                 depth_ops: Some(wgpu::Operations {

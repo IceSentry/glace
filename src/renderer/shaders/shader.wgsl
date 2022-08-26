@@ -1,24 +1,24 @@
 struct CameraUniform {
-    view_pos: vec4<f32>;
-    view_proj: mat4x4<f32>;
-};
-[[group(0), binding(0)]]
+    view_pos: vec4<f32>,
+    view_proj: mat4x4<f32>,
+}
+@group(0) @binding(0)
 var<uniform> camera: CameraUniform;
 
 struct Light {
-    position: vec3<f32>;
-    color: vec3<f32>;
-};
-[[group(0), binding(1)]]
+    position: vec3<f32>,
+    color: vec3<f32>,
+}
+@group(0) @binding(1)
 var<uniform> light: Light;
 
 struct Material {
-    base_color: vec4<f32>;
-    alpha: f32;
-    gloss: f32;
-    specular_color: vec3<f32>;
-    flags: u32;
-};
+    base_color: vec4<f32>,
+    alpha: f32,
+    gloss: f32,
+    specular_color: vec3<f32>,
+    flags: u32,
+}
 
 let MATERIAL_FLAGS_USE_NORMAL_MAP: u32 = 1u;
 let MATERIAL_FLAGS_1: u32 = 2u;
@@ -32,50 +32,51 @@ let MATERIAL_FLAGS_8: u32 = 256u;
 let MATERIAL_FLAGS_9: u32 = 512u;
 let MATERIAL_FLAGS_0: u32 = 1024u;
 
-[[group(1), binding(0)]]
+@group(1) @binding(0)
 var<uniform> material: Material;
 
-[[group(1), binding(1)]]
+@group(1) @binding(1)
 var t_diffuse: texture_2d<f32>;
-[[group(1), binding(2)]]
+@group(1) @binding(2)
 var s_diffuse: sampler;
 
-[[group(1), binding(3)]]
+@group(1) @binding(3)
 var t_normal: texture_2d<f32>;
-[[group(1), binding(4)]]
+@group(1) @binding(4)
 var s_normal: sampler;
 
-[[group(1), binding(5)]]
+@group(1) @binding(5)
 var t_spec: texture_2d<f32>;
-[[group(1), binding(6)]]
+@group(1) @binding(6)
 var s_spec: sampler;
 
 struct Vertex {
-    [[location(0)]] position: vec3<f32>;
-    [[location(1)]] normal: vec3<f32>;
-    [[location(2)]] uv: vec2<f32>;
-    [[location(3)]] tangent: vec3<f32>;
-    [[location(4)]] bitangent: vec3<f32>;
-};
+    @location(0) position: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) uv: vec2<f32>,
+    @location(3) tangent: vec3<f32>,
+    @location(4) bitangent: vec3<f32>,
+}
+
 struct InstanceInput {
-    [[location(5)]] model_matrix_0: vec4<f32>;
-    [[location(6)]] model_matrix_1: vec4<f32>;
-    [[location(7)]] model_matrix_2: vec4<f32>;
-    [[location(8)]] model_matrix_3: vec4<f32>;
-    [[location(9)]] normal_matrix_0: vec3<f32>;
-    [[location(10)]] normal_matrix_1: vec3<f32>;
-    [[location(11)]] normal_matrix_2: vec3<f32>;
-};
+    @location(5) model_matrix_0: vec4<f32>,
+    @location(6) model_matrix_1: vec4<f32>,
+    @location(7) model_matrix_2: vec4<f32>,
+    @location(8) model_matrix_3: vec4<f32>,
+    @location(9) normal_matrix_0: vec3<f32>,
+    @location(10) normal_matrix_1: vec3<f32>,
+    @location(11) normal_matrix_2: vec3<f32>,
+}
 
 struct VertexOutput {
-    [[builtin(position)]] clip_position: vec4<f32>;
-    [[location(0)]] world_position: vec4<f32>;
-    [[location(1)]] world_normal: vec3<f32>;
-    [[location(2)]] uv: vec2<f32>;
-    [[location(3)]] tangent_position: vec3<f32>;
-    [[location(4)]] tangent_light_position: vec3<f32>;
-    [[location(5)]] tangent_view_position: vec3<f32>;
-};
+    @builtin(position) clip_position: vec4<f32>,
+    @location(0) world_position: vec4<f32>,
+    @location(1) world_normal: vec3<f32>,
+    @location(2) uv: vec2<f32>,
+    @location(3) tangent_position: vec3<f32>,
+    @location(4) tangent_light_position: vec3<f32>,
+    @location(5) tangent_view_position: vec3<f32>,
+}
 
 fn build_model_matrix(instance: InstanceInput) -> mat4x4<f32> {
     return mat4x4<f32>(
@@ -94,7 +95,7 @@ fn build_normal_matrix(instance: InstanceInput) -> mat3x3<f32> {
     );
 }
 
-[[stage(vertex)]]
+@vertex
 fn vertex(
     vertex: Vertex,
     instance: InstanceInput,
@@ -128,8 +129,8 @@ fn vertex(
     return out;
 }
 
-[[stage(fragment)]]
-fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+@fragment
+fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let object_color: vec4<f32> = textureSample(t_diffuse, s_diffuse, in.uv);
     var object_specular: vec4<f32> = textureSample(t_spec, s_spec, in.uv);
     let metallic = object_specular.b;

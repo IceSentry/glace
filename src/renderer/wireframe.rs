@@ -23,6 +23,7 @@ const USE_DEPTH: bool = true;
 #[derive(Component)]
 pub struct Wireframe;
 
+#[derive(Resource)]
 pub struct WireframePhase {
     pub render_pipeline: wgpu::RenderPipeline,
     pub multisampled_framebuffer: wgpu::TextureView,
@@ -69,7 +70,7 @@ impl RenderPhase for WireframePhase {
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
-            color_attachments: &[rpass_color_attachment],
+            color_attachments: &[Some(rpass_color_attachment)],
             depth_stencil_attachment: if USE_DEPTH {
                 Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &depth_texture.0.view,
@@ -111,7 +112,7 @@ impl WireframePhase {
 
         let shader = renderer
             .device
-            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
                     "shaders/wireframe.wgsl"
@@ -146,11 +147,11 @@ impl WireframePhase {
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
                     entry_point: "fragment",
-                    targets: &[wgpu::ColorTargetState {
+                    targets: &[Some(wgpu::ColorTargetState {
                         format: renderer.config.format,
                         blend: None,
                         write_mask: wgpu::ColorWrites::ALL,
-                    }],
+                    })],
                 }),
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,

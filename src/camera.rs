@@ -6,6 +6,7 @@ const FRICTION: f32 = 0.5;
 
 const CAMERRA_EYE: Vec3 = Vec3::from_array([0.0, 5.0, 8.0]);
 
+#[derive(Resource)]
 pub struct CameraSettings {
     pub speed: f32,
 }
@@ -35,6 +36,7 @@ impl Projection {
     }
 }
 
+#[derive(Resource)]
 pub struct Camera {
     pub eye: Vec3,
     pub target: Vec3,

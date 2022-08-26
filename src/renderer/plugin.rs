@@ -4,7 +4,7 @@ use winit::dpi::PhysicalSize;
 
 use crate::{
     camera::{Camera, CameraPlugin},
-    egui_plugin::EguiRenderPhase,
+    egui_plugin::{EguiRenderPhase, EguiScreenDesciptorRes},
     instances,
     renderer::{RenderPhase, WgpuRenderer},
     texture::Texture,
@@ -127,7 +127,7 @@ fn resize(
     mut depth_texture: ResMut<DepthTexture>,
     mut camera_uniform: ResMut<CameraUniform>,
     mut camera: ResMut<Camera>,
-    mut screen_descriptor: ResMut<egui_wgpu::renderer::ScreenDescriptor>,
+    mut screen_descriptor: ResMut<EguiScreenDesciptorRes>,
 ) {
     for event in events.iter() {
         let window = windows.get(event.id).expect("window not found");
@@ -144,6 +144,6 @@ fn resize(
         depth_pass.resize(&renderer.device, &depth_texture.0);
 
         // Should probably be done in EguiPlugin
-        screen_descriptor.size_in_pixels = [width as u32, height as u32];
+        screen_descriptor.0.size_in_pixels = [width as u32, height as u32];
     }
 }
