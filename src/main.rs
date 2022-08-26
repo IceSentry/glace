@@ -39,20 +39,6 @@ mod texture;
 mod transform;
 
 const LIGHT_POSITION: Vec3 = Vec3::from_array([2.0, 2.0, 0.0]);
-// const GLTF_MODEL_NAME: &str = "";
-
-// const GLTF_MODEL_NAME: &str = "models/gltf/sponza/Sponza.gltf";
-const GLTF_MODEL_NAME: &str = "models/gltf/bistro/exterior/bistro_exterior.gltf";
-// const OBJ_MODEL_NAME: &str = "models/obj/large_obj/sponza/sponza.obj";
-const SCALE: Vec3 = Vec3::from_array([0.025, 0.025, 0.025]);
-
-// const GLTF_MODEL_NAME: &str = "models/gltf/FlightHelmet/FlightHelmet.gltf";
-// const SCALE: Vec3 = Vec3::from_array([2.5, 2.5, 2.5]);
-
-// const GLTF_MODEL_NAME: &str = "models/gltf/learnopengl_cube_gltf/cube.gltf";
-// const GLTF_MODEL_NAME: &str = "models/gltf/new-sponza/NewSponza_Main_Blender_glTF.gltf";
-// const GLTF_MODEL_NAME: &str = "models/gltf/suzanne/Suzanne.gltf";
-// const SCALE: Vec3 = Vec3::from_array([1.0, 1.0, 1.0]);
 
 struct LightSettings {
     rotate: bool,
@@ -106,7 +92,7 @@ fn main() {
         .add_plugin(GltfLoaderPlugin)
         .add_plugin(ObjLoaderPlugin)
         .add_startup_system(spawn_light)
-        .add_startup_system(spawn_gltf)
+        // .add_system(spawner_ui)
         .add_system(update_window_title)
         .add_system(update_show_depth)
         // .add_system(cursor_moved)
@@ -131,18 +117,6 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
     };
 
     commands.spawn().insert(light).insert(model);
-}
-
-fn spawn_gltf(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands
-        .spawn_bundle(GltfBundle {
-            gltf: asset_server.load(GLTF_MODEL_NAME),
-        })
-        .insert(Transform {
-            scale: SCALE,
-            // translation: Vec3::new(2.0, 0.0, 0.0),
-            ..default()
-        });
 }
 
 fn update_window_title(time: Res<Time>, mut windows: ResMut<Windows>) {
@@ -209,12 +183,15 @@ fn update_materials(mut query: Query<&mut Model>, settings: Res<GlobalMaterialSe
 }
 
 fn settings_ui(
+    mut commands: Commands,
     ctx: Res<egui::Context>,
+    asset_server: Res<AssetServer>,
     mut camera_settings: ResMut<CameraSettings>,
     mut light_settings: ResMut<LightSettings>,
     mut global_material_settings: ResMut<GlobalMaterialSettings>,
     mut instance_settings: ResMut<InstanceSettings>,
     mut descriptor: ResMut<RenderPhase3dDescriptor>,
+    mut spawned_entity: Local<Option<Entity>>,
 ) {
     egui::Window::new("Settings")
         .resizable(true)
@@ -251,5 +228,47 @@ fn settings_ui(
 
             ui.heading("shader");
             ui.checkbox(&mut descriptor.show_depth_buffer, "show depth buffer");
+        });
+
+    let mut spawn_gltf = |model_name: &str, scale: Vec3| {
+        let entity = commands
+            .spawn_bundle(GltfBundle {
+                gltf: asset_server.load(&format!("models/gltf/{model_name}")),
+            })
+            .insert(Transform { scale, ..default() })
+            .id();
+        if let Some(spawned_entity) = *spawned_entity {
+            commands.entity(spawned_entity).despawn_recursive();
+        }
+        *spawned_entity = Some(entity);
+    };
+    egui::Window::new("Spawner")
+        .resizable(true)
+        .collapsible(true)
+        .show(&ctx, |ui| {
+            if ui.button("spawn sponza").clicked() {
+                spawn_gltf("sponza/Sponza.gltf", Vec3::new(0.025, 0.025, 0.025))
+            }
+            if ui.button("spawn new sponza").clicked() {
+                spawn_gltf(
+                    "/new-sponza/NewSponza_Main_Blender_glTF.gltf",
+                    Vec3::new(1.0, 1.0, 1.0),
+                )
+            }
+            if ui.button("spawn bistro exterior").clicked() {
+                spawn_gltf(
+                    "bistro/exterior/bistro_exterior.gltf",
+                    Vec3::new(0.025, 0.025, 0.025),
+                )
+            }
+            if ui.button("spawn flight helmet").clicked() {
+                spawn_gltf("FlightHelmet/FlightHelmet.gltf", Vec3::new(2.5, 2.5, 2.5))
+            }
+            if ui.button("spawn suzanne").clicked() {
+                spawn_gltf("suzanne/Suzanne.gltf", Vec3::new(1.0, 1.0, 1.0))
+            }
+            if ui.button("spawn cube").clicked() {
+                spawn_gltf("learnopengl_cube_gltf/cube.gltf", Vec3::new(1.0, 1.0, 1.0))
+            }
         });
 }
