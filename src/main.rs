@@ -268,7 +268,7 @@ fn settings_ui(
                 spawn_gltf("suzanne/Suzanne.gltf", Vec3::new(1.0, 1.0, 1.0))
             }
             if ui.button("spawn cube").clicked() {
-                spawn_gltf("learnopengl_cube_gltf/cube.gltf", Vec3::new(1.0, 1.0, 1.0))
+                spawn_gltf("learnopengl_cube/cube.gltf", Vec3::new(1.0, 1.0, 1.0))
             }
         });
 }
