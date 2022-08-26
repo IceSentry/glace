@@ -1,15 +1,14 @@
-use bevy::{
-    asset::{AssetLoader, LoadedAsset},
-    prelude::*,
-    reflect::TypeUuid,
-    utils::Instant,
-};
-
 use crate::{
     mesh::Mesh,
     model::{Material, Model, ModelMesh},
     obj_loader::loader::load_obj,
     renderer::WgpuRenderer,
+};
+use bevy::{
+    asset::{AssetLoader, LoadedAsset},
+    prelude::*,
+    reflect::TypeUuid,
+    utils::Instant,
 };
 
 mod loader;
@@ -34,9 +33,9 @@ pub struct LoadedObj {
     pub materials: Vec<Material>,
     pub meshes: Vec<Mesh>,
 }
+
 #[derive(Default)]
 pub struct ObjLoader;
-
 impl AssetLoader for ObjLoader {
     fn extensions(&self) -> &[&str] {
         &["obj"]
@@ -79,9 +78,6 @@ fn obj_spawner(
 ) {
     for (entity, obj_handle) in query.iter() {
         if let Some(obj) = obj_assets.get(obj_handle) {
-            let start = Instant::now();
-            log::info!("Creating Mesh buffers for obj");
-
             let LoadedObj { materials, meshes } = obj;
 
             // TODO mesh label for obj
@@ -89,11 +85,6 @@ fn obj_spawner(
                 .iter()
                 .map(|mesh| ModelMesh::from_mesh("", &renderer.device, mesh))
                 .collect();
-
-            log::info!(
-                "Finished creating mesh buffers {}ms",
-                (Instant::now() - start).as_millis()
-            );
 
             commands.entity(entity).insert(Model {
                 materials: materials.clone(),

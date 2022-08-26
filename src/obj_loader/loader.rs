@@ -30,7 +30,7 @@ pub async fn load_obj<'a, 'b>(
     .with_context(|| format!("Failed to load obj {:?}", load_context.path()))?;
 
     let obj_materials = obj_materials?;
-    let materials: Vec<Material> = IoTaskPool::get()
+    let mut materials: Vec<Material> = IoTaskPool::get()
         .scope(|scope| {
             obj_materials.iter().for_each(|obj_material| {
                 log::info!("Loading {}", obj_material.name);
@@ -46,6 +46,9 @@ pub async fn load_obj<'a, 'b>(
             res.ok()
         })
         .collect();
+    if materials.is_empty() {
+        materials.push(Material::default())
+    }
 
     let meshes = generate_mesh(&obj_models, &materials);
 

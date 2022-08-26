@@ -88,8 +88,8 @@ impl Default for Material {
             gloss: 1.0,
             specular: Vec3::new(1.0, 1.0, 1.0),
             diffuse_texture: image_from_color(Color::WHITE),
-            normal_texture: Default::default(),
-            specular_texture: Default::default(),
+            normal_texture: None,
+            specular_texture: None,
         }
     }
 }

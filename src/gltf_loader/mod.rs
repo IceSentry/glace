@@ -1,3 +1,8 @@
+use crate::{
+    gltf_loader::loader::load_gltf,
+    model::{Material, Model, ModelMesh},
+    renderer::WgpuRenderer,
+};
 use bevy::{
     asset::{AssetLoader, LoadContext, LoadedAsset},
     prelude::*,
@@ -5,16 +10,9 @@ use bevy::{
     utils::Instant,
 };
 
-use crate::{
-    gltf_loader::loader::load_gltf,
-    model::{Material, Model, ModelMesh},
-    renderer::WgpuRenderer,
-};
-
 mod loader;
 
 pub struct GltfLoaderPlugin;
-
 impl Plugin for GltfLoaderPlugin {
     fn build(&self, app: &mut App) {
         app.add_asset::<LoadedGltf>()
@@ -26,16 +24,14 @@ impl Plugin for GltfLoaderPlugin {
     }
 }
 
-#[derive(Default)]
-pub struct GltfLoader;
-
 #[derive(Debug, TypeUuid)]
 #[uuid = "d87cb7a6-21b0-4c5a-933e-9edfe42e653b"]
 pub struct LoadedGltf {
     materials: Vec<Material>,
     meshes: Vec<crate::mesh::Mesh>,
 }
-
+#[derive(Default)]
+pub struct GltfLoader;
 impl AssetLoader for GltfLoader {
     fn extensions(&self) -> &[&str] {
         &["gltf"]

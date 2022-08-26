@@ -69,6 +69,7 @@ impl EguiWinitState {
         event: &winit::event::WindowEvent<'_>,
     ) -> bool {
         use winit::event::WindowEvent;
+        // TODO use bevy events directly
         match event {
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 let pixels_per_point = *scale_factor as f32;

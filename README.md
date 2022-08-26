@@ -13,15 +13,13 @@ It can also be used to showcase integrating a custom renderer to bevy.
 * Specular mapping
 * Instanced rendering
 * Load obj
-* Load gltf
+* Partially load gltf
 * egui integration
 * 3d camera controller
 
 ## TODOs
 
-* Model loading UI
 * MSAA
-* Wireframe
 * Use bevy log plugin and tracing
 * Use bevy mesh and material abstractions
 * PBR
@@ -29,3 +27,7 @@ It can also be used to showcase integrating a custom renderer to bevy.
 * Better sorting for transparent phase
 * Use gltf blend mode
 * GI???
+* Weighted blended order independent transparency
+* Cel shading
+* Bindless rendering
+* Split plugins to separate crates for better compile times
