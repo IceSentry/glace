@@ -37,7 +37,7 @@ mod shapes;
 mod texture;
 mod transform;
 
-const LIGHT_POSITION: Vec3 = Vec3::from_array([2.0, 2.0, 0.0]);
+const LIGHT_POSITION: Vec3 = Vec3::from_array([4.0, 4.0, 0.0]);
 
 #[derive(Resource)]
 struct LightSettings {
@@ -56,6 +56,11 @@ struct InstanceSettings {
     move_instances: bool,
 }
 
+#[derive(Resource)]
+struct ModelSettings {
+    scale: f32,
+}
+
 fn main() {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
@@ -71,7 +76,7 @@ fn main() {
             ..default()
         })
         .insert_resource(RenderPhase3dDescriptor {
-            clear_color: Color::rgba(0.1, 0.1, 0.1, 1.0),
+            clear_color: Color::rgba(0.0, 0.0, 0.0, 1.0),
             ..default()
         })
         .insert_resource(CameraSettings { speed: 10.0 })
@@ -84,6 +89,7 @@ fn main() {
         .insert_resource(InstanceSettings {
             move_instances: false,
         })
+        .insert_resource(ModelSettings { scale: 1.0 })
         .add_plugins(MinimalPlugins)
         .add_plugin(WindowPlugin::default())
         .add_plugin(WinitPlugin)
@@ -101,6 +107,7 @@ fn main() {
         .add_system(exit_on_esc)
         .add_system(settings_ui)
         .add_system(update_materials)
+        .add_system(update_model)
         .run();
 }
 
@@ -183,6 +190,15 @@ fn update_materials(mut query: Query<&mut Model>, settings: Res<GlobalMaterialSe
     }
 }
 
+fn update_model(mut query: Query<&mut Transform, With<Model>>, settings: Res<ModelSettings>) {
+    if !settings.is_changed() {
+        return;
+    }
+    for mut transform in &mut query {
+        transform.scale = Vec3::ONE * settings.scale;
+    }
+}
+
 fn settings_ui(
     mut commands: Commands,
     ctx: Res<EguiCtxRes>,
@@ -191,6 +207,7 @@ fn settings_ui(
     mut light_settings: ResMut<LightSettings>,
     mut global_material_settings: ResMut<GlobalMaterialSettings>,
     mut instance_settings: ResMut<InstanceSettings>,
+    mut model_settings: ResMut<ModelSettings>,
     mut descriptor: ResMut<RenderPhase3dDescriptor>,
     mut spawned_entity: Local<Option<Entity>>,
 ) {
@@ -227,6 +244,12 @@ fn settings_ui(
 
             ui.separator();
 
+            ui.heading("Model");
+            ui.label("scale");
+            ui.add(egui::Slider::new(&mut model_settings.scale, 0.025..=5.0));
+
+            ui.separator();
+
             ui.heading("shader");
             ui.checkbox(&mut descriptor.show_depth_buffer, "show depth buffer");
         });
@@ -250,7 +273,10 @@ fn settings_ui(
                 *spawned_entity = Some(entity);
             };
             if ui.button("spawn sponza").clicked() {
-                spawn_obj("large_obj/sponza/sponza.obj", Vec3::new(0.05, 0.05, 0.05));
+                spawn_obj(
+                    "large_obj/sponza/sponza.obj",
+                    Vec3::new(0.025, 0.025, 0.025),
+                );
             }
             if ui.button("spawn bistro").clicked() {
                 spawn_obj(
@@ -285,6 +311,7 @@ fn settings_ui(
                     .id();
                 *spawned_entity = Some(entity);
             };
+
             if ui.button("spawn sponza").clicked() {
                 spawn_gltf("sponza/Sponza.gltf", Vec3::new(0.025, 0.025, 0.025));
             }
@@ -301,7 +328,7 @@ fn settings_ui(
                 );
             }
             if ui.button("spawn flight helmet").clicked() {
-                spawn_gltf("FlightHelmet/FlightHelmet.gltf", Vec3::new(2.5, 2.5, 2.5));
+                spawn_gltf("FlightHelmet/FlightHelmet.gltf", Vec3::new(2.0, 2.0, 2.0));
             }
             if ui.button("spawn suzanne").clicked() {
                 spawn_gltf("suzanne/Suzanne.gltf", Vec3::new(1.0, 1.0, 1.0));
