@@ -260,7 +260,7 @@ fn settings_ui(
         .show(&ctx.0, |ui| {
             ui.heading("obj");
 
-            let mut spawn_obj = |model_name: &str, scale: Vec3| {
+            let mut spawn_obj = |model_name: &str| {
                 if let Some(spawned_entity) = *spawned_entity {
                     commands.entity(spawned_entity).despawn_recursive();
                 }
@@ -268,38 +268,38 @@ fn settings_ui(
                     .spawn_bundle(ObjBundle {
                         obj: asset_server.load(&format!("models/obj/{model_name}")),
                     })
-                    .insert(Transform { scale, ..default() })
+                    .insert(Transform::default())
                     .id();
                 *spawned_entity = Some(entity);
             };
             if ui.button("spawn sponza").clicked() {
-                spawn_obj(
-                    "large_obj/sponza/sponza.obj",
-                    Vec3::new(0.025, 0.025, 0.025),
-                );
+                model_settings.scale = 0.025;
+                spawn_obj("large_obj/sponza/sponza.obj");
             }
             if ui.button("spawn bistro").clicked() {
-                spawn_obj(
-                    "large_obj/bistro/Exterior/exterior.obj",
-                    Vec3::new(0.05, 0.05, 0.05),
-                );
+                model_settings.scale = 0.05;
+                spawn_obj("large_obj/bistro/Exterior/exterior.obj");
             }
             if ui.button("spawn cube").clicked() {
-                spawn_obj("cube/cube.obj", Vec3::new(1.0, 1.0, 1.0));
+                model_settings.scale = 1.0;
+                spawn_obj("cube/cube.obj");
             }
             if ui.button("spawn cube2").clicked() {
-                spawn_obj("learn_opengl/container2/cube.obj", Vec3::new(1.0, 1.0, 1.0));
+                model_settings.scale = 1.0;
+                spawn_obj("learn_opengl/container2/cube.obj");
             }
             if ui.button("spawn teapot").clicked() {
-                spawn_obj("teapot/teapot.obj", Vec3::new(0.025, 0.025, 0.025));
+                model_settings.scale = 0.025;
+                spawn_obj("teapot/teapot.obj");
             }
             if ui.button("spawn bunny").clicked() {
-                spawn_obj("bunny.obj", Vec3::new(1.5, 1.5, 1.5));
+                model_settings.scale = 1.5;
+                spawn_obj("bunny.obj");
             }
 
             ui.heading("GLTF");
 
-            let mut spawn_gltf = |model_name: &str, scale: Vec3| {
+            let mut spawn_gltf = |model_name: &str| {
                 if let Some(spawned_entity) = *spawned_entity {
                     commands.entity(spawned_entity).despawn_recursive();
                 }
@@ -307,34 +307,34 @@ fn settings_ui(
                     .spawn_bundle(GltfBundle {
                         gltf: asset_server.load(&format!("models/gltf/{model_name}")),
                     })
-                    .insert(Transform { scale, ..default() })
+                    .insert(Transform::default())
                     .id();
                 *spawned_entity = Some(entity);
             };
 
             if ui.button("spawn sponza").clicked() {
-                spawn_gltf("sponza/Sponza.gltf", Vec3::new(0.025, 0.025, 0.025));
+                model_settings.scale = 0.025;
+                spawn_gltf("sponza/Sponza.gltf");
             }
             if ui.button("spawn new sponza").clicked() {
-                spawn_gltf(
-                    "/new-sponza/NewSponza_Main_Blender_glTF.gltf",
-                    Vec3::new(1.0, 1.0, 1.0),
-                );
+                model_settings.scale = 1.0;
+                spawn_gltf("/new-sponza/NewSponza_Main_Blender_glTF.gltf");
             }
             if ui.button("spawn bistro exterior").clicked() {
-                spawn_gltf(
-                    "bistro/exterior/bistro_exterior.gltf",
-                    Vec3::new(0.025, 0.025, 0.025),
-                );
+                model_settings.scale = 0.025;
+                spawn_gltf("bistro/exterior/bistro_exterior.gltf");
             }
             if ui.button("spawn flight helmet").clicked() {
-                spawn_gltf("FlightHelmet/FlightHelmet.gltf", Vec3::new(2.0, 2.0, 2.0));
+                model_settings.scale = 5.0;
+                spawn_gltf("FlightHelmet/FlightHelmet.gltf");
             }
             if ui.button("spawn suzanne").clicked() {
-                spawn_gltf("suzanne/Suzanne.gltf", Vec3::new(1.0, 1.0, 1.0));
+                model_settings.scale = 1.0;
+                spawn_gltf("suzanne/Suzanne.gltf");
             }
             if ui.button("spawn cube").clicked() {
-                spawn_gltf("learnopengl_cube/cube.gltf", Vec3::new(1.0, 1.0, 1.0));
+                model_settings.scale = 1.0;
+                spawn_gltf("learnopengl_cube/cube.gltf");
             }
         });
 }
