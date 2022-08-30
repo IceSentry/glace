@@ -53,11 +53,6 @@ struct GlobalMaterialSettings {
 }
 
 #[derive(Resource)]
-struct InstanceSettings {
-    move_instances: bool,
-}
-
-#[derive(Resource)]
 struct ModelSettings {
     scale: f32,
     wireframe: bool,
@@ -88,9 +83,6 @@ fn main() {
             speed: 0.35,
         })
         .insert_resource(GlobalMaterialSettings { gloss: 0.5 })
-        .insert_resource(InstanceSettings {
-            move_instances: false,
-        })
         .insert_resource(ModelSettings {
             scale: 1.0,
             wireframe: false,
@@ -220,136 +212,129 @@ fn settings_ui(
     mut camera_settings: ResMut<CameraSettings>,
     mut light_settings: ResMut<LightSettings>,
     mut global_material_settings: ResMut<GlobalMaterialSettings>,
-    mut instance_settings: ResMut<InstanceSettings>,
     mut model_settings: ResMut<ModelSettings>,
     mut descriptor: ResMut<RenderPhase3dDescriptor>,
     mut spawned_entity: Local<Option<Entity>>,
 ) {
-    egui::Window::new("Settings")
-        .resizable(true)
-        .collapsible(true)
-        .show(&ctx.0, |ui| {
-            ui.heading("Camera");
-            ui.label("Speed");
-            ui.add(egui::Slider::new(&mut camera_settings.speed, 1.0..=20.0).step_by(0.5));
+    egui::TopBottomPanel::top("my_panel").show(&ctx.0, |ui| {
+        egui::menu::bar(ui, |ui| {
+            ui.menu_button("Spawn", |ui| {
+                ui.menu_button("obj", |ui| {
+                    let mut spawn_obj = |model_name: &str| {
+                        if let Some(spawned_entity) = *spawned_entity {
+                            commands.entity(spawned_entity).despawn_recursive();
+                        }
+                        let entity = commands
+                            .spawn_bundle(ObjBundle {
+                                obj: asset_server.load(&format!("models/obj/{model_name}")),
+                            })
+                            .insert(Transform::default())
+                            .id();
+                        *spawned_entity = Some(entity);
+                    };
+                    if ui.button("sponza").clicked() {
+                        model_settings.scale = 0.025;
+                        spawn_obj("large_obj/sponza/sponza.obj");
+                    }
+                    if ui.button("bistro").clicked() {
+                        model_settings.scale = 0.05;
+                        spawn_obj("large_obj/bistro/Exterior/exterior.obj");
+                    }
+                    if ui.button("cube").clicked() {
+                        model_settings.scale = 1.0;
+                        spawn_obj("cube/cube.obj");
+                    }
+                    if ui.button("cube2").clicked() {
+                        model_settings.scale = 1.0;
+                        spawn_obj("learn_opengl/container2/cube.obj");
+                    }
+                    if ui.button("teapot").clicked() {
+                        model_settings.scale = 0.025;
+                        spawn_obj("teapot/teapot.obj");
+                    }
+                    if ui.button("bunny").clicked() {
+                        model_settings.scale = 1.5;
+                        spawn_obj("bunny.obj");
+                    }
+                });
 
-            ui.separator();
+                ui.separator();
 
-            ui.heading("Light");
-            ui.checkbox(&mut light_settings.rotate, "Rotate");
-            ui.label("Speed");
-            ui.add(egui::Slider::new(&mut light_settings.speed, 0.0..=2.0).step_by(0.05));
-            ui.label("Color");
-            ui.color_edit_button_rgb(&mut light_settings.color);
-
-            ui.separator();
-
-            ui.heading("Global Material");
-            ui.label("Gloss");
-            ui.add(egui::Slider::new(
-                &mut global_material_settings.gloss,
-                0.0..=1.0,
-            ));
-
-            ui.separator();
-
-            ui.heading("Instances");
-            ui.checkbox(&mut instance_settings.move_instances, "Move");
-
-            ui.separator();
-
-            ui.heading("Model");
-            ui.label("scale");
-            ui.add(egui::Slider::new(&mut model_settings.scale, 0.025..=5.0));
-            ui.checkbox(&mut model_settings.wireframe, "wireframe");
-
-            ui.separator();
-
-            ui.heading("shader");
-            ui.checkbox(&mut descriptor.show_depth_buffer, "show depth buffer");
+                ui.menu_button("gltf", |ui| {
+                    let mut spawn_gltf = |model_name: &str| {
+                        if let Some(spawned_entity) = *spawned_entity {
+                            commands.entity(spawned_entity).despawn_recursive();
+                        }
+                        let entity = commands
+                            .spawn_bundle(GltfBundle {
+                                gltf: asset_server.load(&format!("models/gltf/{model_name}")),
+                            })
+                            .insert(Transform::default())
+                            .id();
+                        *spawned_entity = Some(entity);
+                    };
+                    if ui.button("sponza").clicked() {
+                        model_settings.scale = 0.025;
+                        spawn_gltf("sponza/Sponza.gltf");
+                    }
+                    if ui.button("new sponza").clicked() {
+                        model_settings.scale = 1.0;
+                        spawn_gltf("/new-sponza/NewSponza_Main_Blender_glTF.gltf");
+                    }
+                    if ui.button("bistro exterior").clicked() {
+                        model_settings.scale = 0.025;
+                        spawn_gltf("bistro/exterior/bistro_exterior.gltf");
+                    }
+                    if ui.button("flight helmet").clicked() {
+                        model_settings.scale = 5.0;
+                        spawn_gltf("FlightHelmet/FlightHelmet.gltf");
+                    }
+                    if ui.button("suzanne").clicked() {
+                        model_settings.scale = 1.0;
+                        spawn_gltf("suzanne/Suzanne.gltf");
+                    }
+                    if ui.button("cube").clicked() {
+                        model_settings.scale = 1.0;
+                        spawn_gltf("learnopengl_cube/cube.gltf");
+                    }
+                });
+            });
         });
+    });
 
-    egui::Window::new("Spawner")
-        .resizable(true)
-        .collapsible(true)
-        .show(&ctx.0, |ui| {
-            ui.heading("obj");
+    egui::SidePanel::left("Settings").show(&ctx.0, |ui| {
+        ui.heading("Camera");
+        ui.label("Speed");
+        ui.add(egui::Slider::new(&mut camera_settings.speed, 1.0..=20.0).step_by(0.5));
 
-            let mut spawn_obj = |model_name: &str| {
-                if let Some(spawned_entity) = *spawned_entity {
-                    commands.entity(spawned_entity).despawn_recursive();
-                }
-                let entity = commands
-                    .spawn_bundle(ObjBundle {
-                        obj: asset_server.load(&format!("models/obj/{model_name}")),
-                    })
-                    .insert(Transform::default())
-                    .id();
-                *spawned_entity = Some(entity);
-            };
-            if ui.button("spawn sponza").clicked() {
-                model_settings.scale = 0.025;
-                spawn_obj("large_obj/sponza/sponza.obj");
-            }
-            if ui.button("spawn bistro").clicked() {
-                model_settings.scale = 0.05;
-                spawn_obj("large_obj/bistro/Exterior/exterior.obj");
-            }
-            if ui.button("spawn cube").clicked() {
-                model_settings.scale = 1.0;
-                spawn_obj("cube/cube.obj");
-            }
-            if ui.button("spawn cube2").clicked() {
-                model_settings.scale = 1.0;
-                spawn_obj("learn_opengl/container2/cube.obj");
-            }
-            if ui.button("spawn teapot").clicked() {
-                model_settings.scale = 0.025;
-                spawn_obj("teapot/teapot.obj");
-            }
-            if ui.button("spawn bunny").clicked() {
-                model_settings.scale = 1.5;
-                spawn_obj("bunny.obj");
-            }
+        ui.separator();
 
-            ui.heading("GLTF");
+        ui.heading("Light");
+        ui.checkbox(&mut light_settings.rotate, "Rotate");
+        ui.label("Speed");
+        ui.add(egui::Slider::new(&mut light_settings.speed, 0.0..=2.0).step_by(0.05));
+        ui.label("Color");
+        ui.color_edit_button_rgb(&mut light_settings.color);
 
-            let mut spawn_gltf = |model_name: &str| {
-                if let Some(spawned_entity) = *spawned_entity {
-                    commands.entity(spawned_entity).despawn_recursive();
-                }
-                let entity = commands
-                    .spawn_bundle(GltfBundle {
-                        gltf: asset_server.load(&format!("models/gltf/{model_name}")),
-                    })
-                    .insert(Transform::default())
-                    .id();
-                *spawned_entity = Some(entity);
-            };
+        ui.separator();
 
-            if ui.button("spawn sponza").clicked() {
-                model_settings.scale = 0.025;
-                spawn_gltf("sponza/Sponza.gltf");
-            }
-            if ui.button("spawn new sponza").clicked() {
-                model_settings.scale = 1.0;
-                spawn_gltf("/new-sponza/NewSponza_Main_Blender_glTF.gltf");
-            }
-            if ui.button("spawn bistro exterior").clicked() {
-                model_settings.scale = 0.025;
-                spawn_gltf("bistro/exterior/bistro_exterior.gltf");
-            }
-            if ui.button("spawn flight helmet").clicked() {
-                model_settings.scale = 5.0;
-                spawn_gltf("FlightHelmet/FlightHelmet.gltf");
-            }
-            if ui.button("spawn suzanne").clicked() {
-                model_settings.scale = 1.0;
-                spawn_gltf("suzanne/Suzanne.gltf");
-            }
-            if ui.button("spawn cube").clicked() {
-                model_settings.scale = 1.0;
-                spawn_gltf("learnopengl_cube/cube.gltf");
-            }
-        });
+        ui.heading("Global Material");
+        ui.label("Gloss");
+        ui.add(egui::Slider::new(
+            &mut global_material_settings.gloss,
+            0.0..=1.0,
+        ));
+
+        ui.separator();
+
+        ui.heading("Model");
+        ui.label("scale");
+        ui.add(egui::Slider::new(&mut model_settings.scale, 0.025..=5.0));
+        ui.checkbox(&mut model_settings.wireframe, "wireframe");
+
+        ui.separator();
+
+        ui.heading("shader");
+        ui.checkbox(&mut descriptor.show_depth_buffer, "show depth buffer");
+    });
 }
