@@ -15,10 +15,11 @@ use crate::{
 use bevy::{
     app::AppExit,
     asset::AssetPlugin,
+    diagnostic::{Diagnostic, Diagnostics, FrameTimeDiagnosticsPlugin},
     input::{Input, InputPlugin},
     math::{Quat, Vec3},
     prelude::*,
-    window::{CursorMoved, WindowDescriptor, WindowPlugin, Windows},
+    window::{CursorMoved, WindowDescriptor, WindowPlugin},
     winit::WinitPlugin,
     MinimalPlugins,
 };
@@ -70,10 +71,11 @@ fn main() {
             // width: 800.0,
             // height: 600.0,
             // mode: WindowMode::Fullscreen,
+            title: "glace".into(),
             ..default()
         })
         .insert_resource(RenderPhase3dDescriptor {
-            clear_color: Color::rgba(0.0, 0.0, 0.0, 1.0),
+            clear_color: Color::rgba(0.1, 0.1, 0.1, 1.0),
             ..default()
         })
         .insert_resource(CameraSettings { speed: 10.0 })
@@ -87,6 +89,7 @@ fn main() {
             scale: 1.0,
             wireframe: false,
         })
+        .init_resource::<Diagnostics>()
         .add_plugins(MinimalPlugins)
         .add_plugin(WindowPlugin::default())
         .add_plugin(WinitPlugin)
@@ -96,8 +99,8 @@ fn main() {
         .add_plugin(EguiPlugin)
         .add_plugin(ObjLoaderPlugin)
         .add_plugin(GltfLoaderPlugin)
+        .add_plugin(FrameTimeDiagnosticsPlugin::default())
         .add_startup_system(spawn_light)
-        .add_system(update_window_title)
         .add_system(update_show_depth)
         // .add_system(cursor_moved)
         .add_system(update_light)
@@ -122,12 +125,6 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
     };
 
     commands.spawn().insert(light).insert(model);
-}
-
-fn update_window_title(time: Res<Time>, mut windows: ResMut<Windows>) {
-    if let Some(window) = windows.get_primary_mut() {
-        window.set_title(format!("dt: {}ms", time.delta().as_millis()));
-    }
 }
 
 fn update_show_depth(
@@ -214,6 +211,7 @@ fn settings_ui(
     mut global_material_settings: ResMut<GlobalMaterialSettings>,
     mut model_settings: ResMut<ModelSettings>,
     mut descriptor: ResMut<RenderPhase3dDescriptor>,
+    diagnostics: ResMut<Diagnostics>,
     mut spawned_entity: Local<Option<Entity>>,
 ) {
     egui::TopBottomPanel::top("my_panel").show(&ctx.0, |ui| {
@@ -302,6 +300,18 @@ fn settings_ui(
         });
     });
 
+    if spawned_entity.is_none() {
+        log::info!("Spawning default");
+        model_settings.scale = 5.0;
+        let entity = commands
+            .spawn_bundle(GltfBundle {
+                gltf: asset_server.load("models/gltf/FlightHelmet/FlightHelmet.gltf"),
+            })
+            .insert(Transform::default())
+            .id();
+        *spawned_entity = Some(entity);
+    }
+
     egui::SidePanel::left("Settings").show(&ctx.0, |ui| {
         ui.heading("Camera");
         ui.label("Speed");
@@ -337,4 +347,34 @@ fn settings_ui(
         ui.heading("shader");
         ui.checkbox(&mut descriptor.show_depth_buffer, "show depth buffer");
     });
+
+    egui::Area::new("Performance area")
+        .interactable(false)
+        .anchor(egui::Align2::LEFT_TOP, [0., 0.])
+        .show(&ctx.0, |ui| {
+            egui::Frame::none()
+                .fill(egui::Color32::from_rgba_premultiplied(
+                    0,
+                    0,
+                    0,
+                    (0.75 * 256.0) as u8,
+                ))
+                .show(ui, |ui| {
+                    let fps = diagnostics
+                        .get(FrameTimeDiagnosticsPlugin::FPS)
+                        .and_then(Diagnostic::average);
+                    let frame_time = diagnostics
+                        .get(FrameTimeDiagnosticsPlugin::FRAME_TIME)
+                        .and_then(Diagnostic::average);
+
+                    let (fps, frame_time) = match (fps, frame_time) {
+                        (Some(fps), Some(frame_time)) => (fps, frame_time),
+                        _ => return,
+                    };
+
+                    ui.visuals_mut().override_text_color = Some(egui::Color32::WHITE);
+                    ui.label(format!("fps: {:.2}", fps));
+                    ui.label(format!("dt: {:.2}ms", frame_time));
+                });
+        });
 }
