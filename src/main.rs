@@ -22,6 +22,7 @@ use bevy::{
     winit::WinitPlugin,
     MinimalPlugins,
 };
+use renderer::wireframe::Wireframe;
 
 mod camera;
 mod egui_plugin;
@@ -59,6 +60,7 @@ struct InstanceSettings {
 #[derive(Resource)]
 struct ModelSettings {
     scale: f32,
+    wireframe: bool,
 }
 
 fn main() {
@@ -89,7 +91,10 @@ fn main() {
         .insert_resource(InstanceSettings {
             move_instances: false,
         })
-        .insert_resource(ModelSettings { scale: 1.0 })
+        .insert_resource(ModelSettings {
+            scale: 1.0,
+            wireframe: false,
+        })
         .add_plugins(MinimalPlugins)
         .add_plugin(WindowPlugin::default())
         .add_plugin(WinitPlugin)
@@ -190,12 +195,21 @@ fn update_materials(mut query: Query<&mut Model>, settings: Res<GlobalMaterialSe
     }
 }
 
-fn update_model(mut query: Query<&mut Transform, With<Model>>, settings: Res<ModelSettings>) {
+fn update_model(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut Transform), With<Model>>,
+    settings: Res<ModelSettings>,
+) {
     if !settings.is_changed() {
         return;
     }
-    for mut transform in &mut query {
+    for (entity, mut transform) in &mut query {
         transform.scale = Vec3::ONE * settings.scale;
+        if settings.wireframe {
+            commands.entity(entity).insert(Wireframe);
+        } else {
+            commands.entity(entity).remove::<Wireframe>();
+        }
     }
 }
 
@@ -247,6 +261,7 @@ fn settings_ui(
             ui.heading("Model");
             ui.label("scale");
             ui.add(egui::Slider::new(&mut model_settings.scale, 0.025..=5.0));
+            ui.checkbox(&mut model_settings.wireframe, "wireframe");
 
             ui.separator();
 
