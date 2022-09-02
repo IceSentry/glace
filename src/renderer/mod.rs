@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use wgpu::CommandEncoder;
+use wgpu::{CommandEncoder, SurfaceTexture, TextureView};
 use winit::window::Window;
 
 use crate::egui_plugin::EguiRenderPhase;
@@ -10,6 +10,7 @@ pub mod bind_groups;
 pub mod depth_pass;
 pub mod plugin;
 pub mod render_phase_3d;
+pub mod render_phase_3d_plugin;
 pub mod wireframe;
 
 // NOTE: Is this trait necessary?
@@ -25,6 +26,13 @@ pub struct WgpuRenderer {
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
+    pub current_frame: Option<CurrentFrame>,
+}
+
+pub struct CurrentFrame {
+    pub output: SurfaceTexture,
+    pub view: TextureView,
+    pub encoder: CommandEncoder,
 }
 
 impl WgpuRenderer {
@@ -69,6 +77,7 @@ impl WgpuRenderer {
             queue,
             config,
             size,
+            current_frame: None,
         }
     }
 
@@ -161,13 +170,13 @@ impl WgpuRenderer {
         let phase = world.resource::<RenderPhase3d>();
         phase.render(world, &view, &mut encoder);
 
-        let phase = world.resource::<WireframePhase>();
-        phase.render(world, &view, &mut encoder);
+        // let phase = world.resource::<WireframePhase>();
+        // phase.render(world, &view, &mut encoder);
 
-        let phase = world.get_non_send_resource::<EguiRenderPhase>();
-        if let Some(phase) = phase {
-            phase.render(world, &view, &mut encoder);
-        }
+        // let phase = world.get_non_send_resource::<EguiRenderPhase>();
+        // if let Some(phase) = phase {
+        //     phase.render(world, &view, &mut encoder);
+        // }
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();

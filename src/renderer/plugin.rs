@@ -1,5 +1,6 @@
 use bevy::{ecs::system::Resource, prelude::*, window::WindowResized, winit::WinitWindows};
 use futures_lite::future;
+use wgpu::{CommandEncoder, SurfaceTexture, TextureView};
 use winit::dpi::PhysicalSize;
 
 use crate::{
@@ -14,8 +15,17 @@ use super::{
     bind_groups::{self, mesh_view::CameraUniform},
     depth_pass::DepthPass,
     render_phase_3d::{DepthTexture, RenderPhase3d},
+    render_phase_3d_plugin::RenderPhase3dPlugin,
     wireframe::WireframePhase,
 };
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, StageLabel)]
+pub enum RendererStage {
+    StartRender,
+    Render,
+    EndRender,
+    Init,
+}
 
 pub struct WgpuRendererPlugin;
 impl Plugin for WgpuRendererPlugin {
@@ -27,50 +37,73 @@ impl Plugin for WgpuRendererPlugin {
             .add_startup_system_to_stage(StartupStage::PreStartup, init_renderer)
             .add_startup_stage_after(
                 StartupStage::PostStartup,
-                "init_render_phase",
+                RendererStage::Init,
                 SystemStage::parallel(),
             )
-            .add_startup_system_to_stage("init_render_phase", init_render_phase.exclusive_system())
-            .add_startup_system_to_stage(
-                "init_render_phase",
-                init_wireframe_phase.exclusive_system(),
-            )
-            .add_startup_system(init_depth_pass)
+            // .add_startup_stage_after(
+            //     StartupStage::PostStartup,
+            //     "init_render_phase",
+            //     SystemStage::parallel(),
+            // )
+            // .add_startup_system_to_stage("init_render_phase", init_render_phase.exclusive_system())
+            // .add_startup_system_to_stage(
+            //     "init_render_phase",
+            //     init_wireframe_phase.exclusive_system(),
+            // )
+            // .add_startup_system(init_depth_pass)
             .add_startup_system_to_stage(
                 // Needs to be in PostStartup because it sets up the bind_group based on
                 // what was spawned in the startup
                 StartupStage::PostStartup,
                 bind_groups::mesh_view::setup_mesh_view_bind_group,
             )
-            .add_system_to_stage(
+            .add_stage_after(
                 CoreStage::PostUpdate,
-                update_render_phase::<RenderPhase3d>
-                    .exclusive_system()
-                    .before("render"),
+                RendererStage::StartRender,
+                SystemStage::parallel(),
             )
-            .add_system_to_stage(
-                CoreStage::PostUpdate,
-                update_render_phase::<EguiRenderPhase>
-                    .exclusive_system()
-                    .before("render"),
+            .add_stage_after(
+                RendererStage::StartRender,
+                RendererStage::Render,
+                SystemStage::parallel(),
             )
-            .add_system_to_stage(
-                CoreStage::PostUpdate,
-                update_render_phase::<WireframePhase>
-                    .exclusive_system()
-                    .before("render"),
+            .add_stage_after(
+                RendererStage::Render,
+                RendererStage::EndRender,
+                SystemStage::parallel(),
             )
-            .add_system_to_stage(
-                CoreStage::PostUpdate,
-                render.exclusive_system().label("render"),
-            )
+            // .add_system_to_stage(
+            //     CoreStage::PostUpdate,
+            //     update_render_phase::<RenderPhase3d>
+            //         .exclusive_system()
+            //         .before("render"),
+            // )
+            // .add_system_to_stage(
+            //     CoreStage::PostUpdate,
+            //     update_render_phase::<EguiRenderPhase>
+            //         .exclusive_system()
+            //         .before("render"),
+            // )
+            // .add_system_to_stage(
+            //     CoreStage::PostUpdate,
+            //     update_render_phase::<WireframePhase>
+            //         .exclusive_system()
+            //         .before("render"),
+            // )
+            // .add_system_to_stage(
+            //     CoreStage::PostUpdate,
+            //     render.exclusive_system().label("render"),
+            // )
+            .add_system_to_stage(RendererStage::StartRender, start_render)
+            .add_system_to_stage(RendererStage::EndRender, end_render)
             .add_system(bind_groups::mesh_view::update_light_buffer)
             .add_system(bind_groups::mesh_view::update_camera_buffer)
             .add_system(bind_groups::material::update_material_buffer)
             .add_system(bind_groups::material::create_material_uniform)
             .add_system(instances::update_instance_buffer)
             .add_system(instances::create_instance_buffer)
-            .add_system(resize);
+            .add_system(resize)
+            .add_plugin(RenderPhase3dPlugin);
     }
 }
 
@@ -112,6 +145,73 @@ fn render(world: &World, renderer: Res<WgpuRenderer>) {
     };
 }
 
+#[derive(Resource)]
+pub struct WgpuSurfaceTexture(pub Option<SurfaceTexture>);
+
+#[derive(Resource)]
+pub struct WgpuView(pub TextureView);
+
+#[derive(Resource)]
+pub struct WgpuEncoder(pub Option<CommandEncoder>);
+
+fn start_render(mut commands: Commands, mut renderer: ResMut<WgpuRenderer>, windows: Res<Windows>) {
+    if windows.get_primary().is_none() {
+        return;
+    }
+
+    let output = match renderer.surface.get_current_texture() {
+        Ok(swap_chain_frame) => swap_chain_frame,
+        Err(wgpu::SurfaceError::Outdated) => {
+            renderer
+                .surface
+                .configure(&renderer.device, &renderer.config);
+            renderer
+                .surface
+                .get_current_texture()
+                .expect("Failed to reconfigure surface")
+        }
+        err => {
+            log::error!("failed  to get surface texture. {err:?}");
+            return;
+        }
+    };
+
+    let view = output
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
+
+    let encoder = renderer
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Render Encoder"),
+        });
+
+    commands.insert_resource(WgpuSurfaceTexture(Some(output)));
+    commands.insert_resource(WgpuView(view));
+    commands.insert_resource(WgpuEncoder(Some(encoder)));
+
+    // renderer.current_frame = Some(CurrentFrame {
+    //     output,
+    //     view,
+    //     encoder,
+    // })
+}
+
+fn end_render(
+    mut renderer: ResMut<WgpuRenderer>,
+    windows: Res<Windows>,
+    mut encoder: ResMut<WgpuEncoder>,
+    mut output: ResMut<WgpuSurfaceTexture>,
+) {
+    if windows.get_primary().is_none() {
+        return;
+    }
+    if let Some(encoder) = encoder.0.take() {
+        renderer.queue.submit(std::iter::once(encoder.finish()));
+        output.0.take().unwrap().present();
+    }
+}
+
 fn update_render_phase<T: RenderPhase + Resource>(world: &mut World) {
     world.resource_scope(|world, mut phase: Mut<T>| {
         phase.update(world);
@@ -123,7 +223,7 @@ fn resize(
     mut renderer: ResMut<WgpuRenderer>,
     mut events: EventReader<WindowResized>,
     windows: Res<Windows>,
-    mut depth_pass: ResMut<DepthPass>,
+    // mut depth_pass: ResMut<DepthPass>,
     mut depth_texture: ResMut<DepthTexture>,
     mut camera_uniform: ResMut<CameraUniform>,
     mut camera: ResMut<Camera>,
@@ -141,7 +241,7 @@ fn resize(
         renderer.resize(PhysicalSize { width, height });
 
         depth_texture.0 = Texture::create_depth_texture(&renderer.device, &renderer.config);
-        depth_pass.resize(&renderer.device, &depth_texture.0);
+        // depth_pass.resize(&renderer.device, &depth_texture.0);
 
         // Should probably be done in EguiPlugin
         screen_descriptor.0.size_in_pixels = [width as u32, height as u32];

@@ -25,8 +25,6 @@ struct InstanceInput {
     @location(11) normal_matrix_2: vec3<f32>,
 }
 
-
-
 fn build_model_matrix(instance: InstanceInput) -> mat4x4<f32> {
     return mat4x4<f32>(
         instance.model_matrix_0,
