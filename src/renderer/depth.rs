@@ -1,12 +1,59 @@
-use crate::{renderer::WgpuRenderer, texture::Texture};
 use bevy::{
-    prelude::Resource,
+    prelude::*,
     render::render_resource::{encase, ShaderType},
 };
 use wgpu::util::DeviceExt;
 
+use super::{
+    plugin::{RenderLabel, RendererStage, WgpuEncoder, WgpuView},
+    DepthTexture, WgpuRenderer,
+};
+use crate::texture::Texture;
+
 const DEFAULT_NEAR: f32 = 0.1;
 const DEFAULT_FAR: f32 = 1000.0;
+
+#[derive(Default, Resource)]
+pub struct DepthPassSettings {
+    pub show_depth_buffer: bool,
+}
+
+pub struct DepthPassPlugin;
+impl Plugin for DepthPassPlugin {
+    fn build(&self, app: &mut bevy::prelude::App) {
+        app.add_startup_system_to_stage(RendererStage::Init, setup)
+            .add_system_to_stage(
+                RendererStage::Render,
+                render
+                    .label(RenderLabel::Depth)
+                    .after(RenderLabel::Wireframe),
+            )
+            .init_resource::<DepthPassSettings>();
+    }
+}
+
+fn setup(mut commands: Commands, renderer: Res<WgpuRenderer>, depth_texture: Res<DepthTexture>) {
+    commands.insert_resource(DepthPass::new(&renderer, &depth_texture.0));
+}
+
+fn render(
+    depth_pass: Res<DepthPass>,
+    mut encoder: ResMut<WgpuEncoder>,
+    view: Res<WgpuView>,
+    settings: Res<DepthPassSettings>,
+) {
+    if !settings.show_depth_buffer {
+        return;
+    }
+
+    let encoder = if let Some(encoder) = encoder.0.as_mut() {
+        encoder
+    } else {
+        return;
+    };
+
+    depth_pass.render(&view.0, encoder);
+}
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]

@@ -1,5 +1,13 @@
 use bevy::prelude::*;
 
+use super::{
+    bind_groups::{
+        material::{self, GpuModelMaterials},
+        mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout},
+    },
+    plugin::{RenderLabel, RendererStage, WgpuEncoder, WgpuView},
+    DepthTexture, GlaceClearColor, WgpuRenderer,
+};
 use crate::{
     instances::{InstanceBuffer, Instances},
     light::{draw_light_model, Light},
@@ -9,29 +17,22 @@ use crate::{
     transform::TransformRaw,
 };
 
-use super::{
-    bind_groups::{
-        material::{self, GpuModelMaterials},
-        mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout},
-    },
-    plugin::{RendererStage, WgpuEncoder, WgpuSurfaceTexture, WgpuView},
-    render_phase_3d::{DepthTexture, RenderPhase3dDescriptor, Transparent},
-    WgpuRenderer,
-};
-
-pub struct RenderPhase3dPlugin;
-impl Plugin for RenderPhase3dPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_startup_system_to_stage(RendererStage::Init, setup)
-            .add_system_to_stage(RendererStage::Render, render);
-    }
-}
+#[derive(Component)]
+pub struct Transparent;
 
 #[derive(Resource)]
 struct OpaquePass {
     render_pipeline: wgpu::RenderPipeline,
     light_render_pipeline: wgpu::RenderPipeline,
     transparent_render_pipeline: wgpu::RenderPipeline,
+}
+
+pub struct RenderPhase3dPlugin;
+impl Plugin for RenderPhase3dPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_startup_system_to_stage(RendererStage::Init, setup)
+            .add_system_to_stage(RendererStage::Render, render.label(RenderLabel::Base3d));
+    }
 }
 
 fn setup(
@@ -108,14 +109,11 @@ fn setup(
         light_render_pipeline,
         transparent_render_pipeline,
     });
-    let depth_texture = Texture::create_depth_texture(&renderer.device, &renderer.config);
-    commands.insert_resource(DepthTexture(depth_texture));
 }
 
 fn render(
     mesh_view_bind_group: Res<MeshViewBindGroup>,
     depth_texture: Res<DepthTexture>,
-    render_phase_3d_descriptor: Res<RenderPhase3dDescriptor>,
     mut encoder: ResMut<WgpuEncoder>,
     view: Res<WgpuView>,
     opaque_pass: Res<OpaquePass>,
@@ -129,14 +127,13 @@ fn render(
         ),
         (Without<Light>, Without<Transparent>),
     >,
+    clear_color: Res<GlaceClearColor>,
 ) {
     let encoder = if let Some(encoder) = encoder.0.as_mut() {
         encoder
     } else {
         return;
     };
-
-    let clear_color = render_phase_3d_descriptor.clear_color;
 
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Opaque Render Pass"),
@@ -145,10 +142,10 @@ fn render(
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: clear_color.r() as f64,
-                    g: clear_color.g() as f64,
-                    b: clear_color.b() as f64,
-                    a: clear_color.a() as f64,
+                    r: clear_color.0.r() as f64,
+                    g: clear_color.0.g() as f64,
+                    b: clear_color.0.b() as f64,
+                    a: clear_color.0.a() as f64,
                 }),
                 store: true,
             },
@@ -178,18 +175,18 @@ fn render(
     }
 
     // TODO I need a better way to identify transparent meshes in a model
-    // render_pass.set_pipeline(&opaque_pass.transparent_render_pipeline);
-    // for (model, instance_buffer, instances, gpu_materials) in &model_query {
-    //     // The draw function also uses the instance buffer under the hood it simply is of size 1
-    //     render_pass.set_vertex_buffer(1, instance_buffer.0.slice(..));
-    //     model.draw_instanced(
-    //         &mut render_pass,
-    //         0..instances.map(|i| i.0.len() as u32).unwrap_or(1),
-    //         gpu_materials,
-    //         &mesh_view_bind_group.0,
-    //         true,
-    //     );
-    // }
+    render_pass.set_pipeline(&opaque_pass.transparent_render_pipeline);
+    for (model, instance_buffer, instances, gpu_materials) in &model_query {
+        // The draw function also uses the instance buffer under the hood it simply is of size 1
+        render_pass.set_vertex_buffer(1, instance_buffer.0.slice(..));
+        model.draw_instanced(
+            &mut render_pass,
+            0..instances.map(|i| i.0.len() as u32).unwrap_or(1),
+            gpu_materials,
+            &mesh_view_bind_group.0,
+            true,
+        );
+    }
 
     render_pass.set_pipeline(&opaque_pass.light_render_pipeline);
     for light_model in &light_query {

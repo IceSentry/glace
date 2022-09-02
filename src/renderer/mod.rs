@@ -1,23 +1,19 @@
 use bevy::prelude::*;
-use wgpu::{CommandEncoder, SurfaceTexture, TextureView};
 use winit::window::Window;
 
-use crate::egui_plugin::EguiRenderPhase;
+use crate::texture::Texture;
 
-use self::{render_phase_3d::RenderPhase3d, wireframe::WireframePhase};
-
+pub mod base_3d;
 pub mod bind_groups;
-pub mod depth_pass;
+pub mod depth;
 pub mod plugin;
-pub mod render_phase_3d;
-pub mod render_phase_3d_plugin;
 pub mod wireframe;
 
-// NOTE: Is this trait necessary?
-pub trait RenderPhase {
-    fn update(&mut self, world: &mut World);
-    fn render(&self, world: &World, view: &wgpu::TextureView, encoder: &mut CommandEncoder);
-}
+#[derive(Resource)]
+pub struct DepthTexture(pub Texture);
+
+#[derive(Default, Resource)]
+pub struct GlaceClearColor(pub Color);
 
 #[derive(Resource)]
 pub struct WgpuRenderer {
@@ -26,13 +22,6 @@ pub struct WgpuRenderer {
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
-    pub current_frame: Option<CurrentFrame>,
-}
-
-pub struct CurrentFrame {
-    pub output: SurfaceTexture,
-    pub view: TextureView,
-    pub encoder: CommandEncoder,
 }
 
 impl WgpuRenderer {
@@ -77,7 +66,6 @@ impl WgpuRenderer {
             queue,
             config,
             size,
-            current_frame: None,
         }
     }
 
@@ -135,52 +123,5 @@ impl WgpuRenderer {
         } else {
             log::info!("window has been minimized")
         }
-    }
-
-    pub fn render(&self, world: &World) -> anyhow::Result<()> {
-        if world
-            .get_resource::<Windows>()
-            .and_then(|w| w.get_primary())
-            .is_none()
-        {
-            return Ok(());
-        }
-
-        let output = match self.surface.get_current_texture() {
-            Ok(swap_chain_frame) => swap_chain_frame,
-            Err(wgpu::SurfaceError::Outdated) => {
-                self.surface.configure(&self.device, &self.config);
-                self.surface
-                    .get_current_texture()
-                    .expect("Failed to reconfigure surface")
-            }
-            err => err?,
-        };
-
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
-
-        let phase = world.resource::<RenderPhase3d>();
-        phase.render(world, &view, &mut encoder);
-
-        // let phase = world.resource::<WireframePhase>();
-        // phase.render(world, &view, &mut encoder);
-
-        // let phase = world.get_non_send_resource::<EguiRenderPhase>();
-        // if let Some(phase) = phase {
-        //     phase.render(world, &view, &mut encoder);
-        // }
-
-        self.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
-
-        Ok(())
     }
 }

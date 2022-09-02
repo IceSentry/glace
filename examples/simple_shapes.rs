@@ -5,10 +5,7 @@ use glace::{
     egui_plugin::EguiPlugin,
     light::Light,
     model::{self, Model},
-    renderer::{
-        plugin::WgpuRendererPlugin, render_phase_3d::RenderPhase3dDescriptor, wireframe::Wireframe,
-        WgpuRenderer,
-    },
+    renderer::{plugin::WgpuRendererPlugin, wireframe::Wireframe, GlaceClearColor, WgpuRenderer},
     shapes,
 };
 
@@ -22,10 +19,7 @@ fn main() {
         .init();
 
     App::new()
-        .insert_resource(RenderPhase3dDescriptor {
-            clear_color: Color::rgba(0.1, 0.1, 0.1, 1.0),
-            ..default()
-        })
+        .insert_resource(GlaceClearColor(Color::rgba(0.1, 0.1, 0.1, 1.0)))
         .insert_resource(CameraSettings { speed: 10.0 })
         .add_plugins(MinimalPlugins)
         .add_plugin(WindowPlugin::default())

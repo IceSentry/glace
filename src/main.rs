@@ -1,6 +1,16 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 
+use bevy::{
+    app::AppExit,
+    asset::AssetPlugin,
+    diagnostic::{Diagnostic, Diagnostics, FrameTimeDiagnosticsPlugin},
+    input::InputPlugin,
+    prelude::*,
+    window::WindowPlugin,
+    winit::WinitPlugin,
+};
+
 use crate::{
     camera::CameraSettings,
     egui_plugin::{EguiCtxRes, EguiPlugin},
@@ -9,21 +19,10 @@ use crate::{
     model::Model,
     obj_loader::{ObjBundle, ObjLoaderPlugin},
     renderer::{
-        plugin::WgpuRendererPlugin, render_phase_3d::RenderPhase3dDescriptor, WgpuRenderer,
+        depth::DepthPassSettings, plugin::WgpuRendererPlugin, wireframe::Wireframe,
+        wireframe::WireframePlugin, GlaceClearColor, WgpuRenderer,
     },
 };
-use bevy::{
-    app::AppExit,
-    asset::AssetPlugin,
-    diagnostic::{Diagnostic, Diagnostics, FrameTimeDiagnosticsPlugin},
-    input::{Input, InputPlugin},
-    math::{Quat, Vec3},
-    prelude::*,
-    window::{WindowDescriptor, WindowPlugin},
-    winit::WinitPlugin,
-    MinimalPlugins,
-};
-use renderer::wireframe::Wireframe;
 
 mod camera;
 mod egui_plugin;
@@ -77,10 +76,7 @@ fn main() {
             title: "glace".into(),
             ..default()
         })
-        .insert_resource(RenderPhase3dDescriptor {
-            clear_color: Color::rgba(0.1, 0.1, 0.1, 1.0),
-            ..default()
-        })
+        .insert_resource(GlaceClearColor(Color::rgba(0.1, 0.1, 0.1, 1.0)))
         .insert_resource(CameraSettings { speed: 10.0 })
         .insert_resource(LightSettings {
             rotate: true,
@@ -100,13 +96,12 @@ fn main() {
         .add_plugin(WgpuRendererPlugin)
         .add_plugin(AssetPlugin)
         .add_plugin(EguiPlugin)
+        .add_plugin(WireframePlugin)
         .add_plugin(ObjLoaderPlugin)
         .add_plugin(GltfLoaderPlugin)
         .add_plugin(FrameTimeDiagnosticsPlugin::default())
         .add_startup_system(spawn_light)
         .add_startup_system(spawn_grid)
-        .add_system(update_show_depth)
-        // .add_system(cursor_moved)
         .add_system(update_light)
         .add_system(exit_on_esc)
         .add_system(settings_ui)
@@ -129,13 +124,15 @@ fn spawn_grid(mut commands: Commands, renderer: Res<WgpuRenderer>) {
             ..model::Material::from_color(Color::GRAY)
         }],
     };
-    commands.spawn_bundle((
-        plane,
-        Transform {
-            translation: Vec3::new(-(size / 2.), 0.0, -(size / 2.)),
-            ..default()
-        },
-    ));
+    commands
+        .spawn_bundle((
+            plane,
+            Transform {
+                translation: Vec3::new(-(size / 2.), 0.0, -(size / 2.)),
+                ..default()
+            },
+        ))
+        .insert(Wireframe);
 }
 
 fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
@@ -152,15 +149,6 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
     };
 
     commands.spawn().insert(light).insert(model);
-}
-
-fn update_show_depth(
-    keyboard_input: Res<Input<KeyCode>>,
-    mut descriptor: ResMut<RenderPhase3dDescriptor>,
-) {
-    if keyboard_input.just_pressed(KeyCode::X) {
-        descriptor.show_depth_buffer = !descriptor.show_depth_buffer;
-    }
 }
 
 fn exit_on_esc(key_input: Res<Input<KeyCode>>, mut exit_events: EventWriter<AppExit>) {
@@ -225,7 +213,7 @@ fn settings_ui(
     mut light_settings: ResMut<LightSettings>,
     mut global_material_settings: ResMut<GlobalMaterialSettings>,
     mut model_settings: ResMut<ModelSettings>,
-    mut descriptor: ResMut<RenderPhase3dDescriptor>,
+    mut depth_settings: ResMut<DepthPassSettings>,
     diagnostics: ResMut<Diagnostics>,
     mut spawned_entity: Local<Option<Entity>>,
 ) {
@@ -363,7 +351,7 @@ fn settings_ui(
         ui.separator();
 
         ui.heading("shader");
-        ui.checkbox(&mut descriptor.show_depth_buffer, "show depth buffer");
+        ui.checkbox(&mut depth_settings.show_depth_buffer, "show depth buffer");
     });
 
     egui::Area::new("Performance area")

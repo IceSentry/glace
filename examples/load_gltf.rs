@@ -8,9 +8,7 @@ use glace::{
     gltf_loader::{GltfBundle, GltfLoaderPlugin},
     light::Light,
     model::Model,
-    renderer::{
-        plugin::WgpuRendererPlugin, render_phase_3d::RenderPhase3dDescriptor, WgpuRenderer,
-    },
+    renderer::{plugin::WgpuRendererPlugin, GlaceClearColor, WgpuRenderer},
     shapes,
 };
 
@@ -24,10 +22,7 @@ fn main() {
         .init();
 
     App::new()
-        .insert_resource(RenderPhase3dDescriptor {
-            clear_color: Color::rgba(0.1, 0.1, 0.1, 1.0),
-            ..default()
-        })
+        .insert_resource(GlaceClearColor(Color::rgba(0.1, 0.1, 0.1, 1.0)))
         .insert_resource(CameraSettings { speed: 10.0 })
         .add_plugins(MinimalPlugins)
         .add_plugin(WindowPlugin::default())

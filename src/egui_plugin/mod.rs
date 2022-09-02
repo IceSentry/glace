@@ -1,12 +1,15 @@
-use self::custom_egui_winit::EguiWinitState;
-use crate::renderer::{RenderPhase, WgpuRenderer};
 use bevy::{
     app::AppExit,
-    ecs::system::SystemState,
     input::mouse::{MouseButtonInput, MouseWheel},
     prelude::*,
     window::WindowCloseRequested,
     winit::WinitWindows,
+};
+
+use self::custom_egui_winit::EguiWinitState;
+use crate::renderer::{
+    plugin::{RenderLabel, RendererStage, WgpuEncoder, WgpuView},
+    WgpuRenderer,
 };
 
 mod custom_egui_winit;
@@ -21,27 +24,18 @@ pub struct EguiScreenDesciptorRes(pub egui_wgpu::renderer::ScreenDescriptor);
 struct EguiRenderPassRes(egui_wgpu::renderer::RenderPass);
 
 #[derive(Resource)]
-#[allow(clippy::type_complexity)]
-pub struct EguiRenderPhase<'w> {
-    state: SystemState<(
-        Res<'w, WgpuRenderer>,
-        Res<'w, EguiScreenDesciptorRes>,
-        NonSend<'w, EguiCtxRes>,
-        NonSendMut<'w, EguiRenderPassRes>,
-        ResMut<'w, EguiWinitState>,
-        Res<'w, Windows>,
-        NonSend<'w, WinitWindows>,
-    )>,
-    paint_jobs: Vec<egui::ClippedPrimitive>,
-}
+struct PaintJobs(Vec<egui::ClippedPrimitive>);
 
 pub struct EguiPlugin;
 impl Plugin for EguiPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(setup)
             .add_startup_system(setup_render_pass.exclusive_system())
-            .add_startup_system(setup_render_phase.exclusive_system())
             .add_system_to_stage(CoreStage::PreUpdate, begin_frame)
+            .add_system_to_stage(
+                RendererStage::Render,
+                render.label(RenderLabel::Egui).after(RenderLabel::Depth),
+            )
             .add_system(handle_mouse_events)
             .add_system(on_exit);
     }
@@ -79,6 +73,8 @@ fn setup(mut commands: Commands, windows: Res<Windows>) {
     }
 
     commands.insert_resource(EguiCtxRes(ctx));
+
+    commands.insert_resource(PaintJobs(vec![]));
 }
 
 fn setup_render_pass(world: &mut World) {
@@ -89,14 +85,6 @@ fn setup_render_pass(world: &mut World) {
         1,
     );
     world.insert_non_send_resource(EguiRenderPassRes(pass));
-}
-
-fn setup_render_phase(world: &mut World) {
-    let initial_state = SystemState::new(world);
-    world.insert_resource(EguiRenderPhase {
-        state: initial_state,
-        paint_jobs: Vec::new(),
-    });
 }
 
 fn begin_frame(
@@ -113,61 +101,59 @@ fn begin_frame(
     }
 }
 
-impl<'w> RenderPhase for EguiRenderPhase<'w> {
-    fn update(&mut self, world: &mut World) {
-        // TODO look if WorldQuery could help simplify this a bit
+fn render(
+    screen_descriptor: Res<EguiScreenDesciptorRes>,
+    mut render_pass: NonSendMut<EguiRenderPassRes>,
+    mut encoder: ResMut<WgpuEncoder>,
+    view: Res<WgpuView>,
+    mut paint_jobs: ResMut<PaintJobs>,
+    renderer: Res<WgpuRenderer>,
+    egui_ctx: NonSend<EguiCtxRes>,
+    mut state: ResMut<EguiWinitState>,
+    windows: Res<Windows>,
+    winit_windows: NonSend<WinitWindows>,
+) {
+    let window = if let Some(window) = windows.get_primary() {
+        winit_windows
+            .get_window(window.id())
+            .expect("Failed to get primary window")
+    } else {
+        return;
+    };
 
-        let (
-            renderer,
-            screen_descriptor,
-            egui_ctx,
-            mut render_pass,
-            mut platform,
-            windows,
-            winit_windows,
-        ) = self.state.get_mut(world);
+    let encoder = if let Some(encoder) = encoder.0.as_mut() {
+        encoder
+    } else {
+        return;
+    };
 
-        let egui::FullOutput {
-            shapes,
-            textures_delta,
-            platform_output,
-            ..
-        } = egui_ctx.0.end_frame();
+    let egui::FullOutput {
+        shapes,
+        textures_delta,
+        platform_output,
+        ..
+    } = egui_ctx.0.end_frame();
 
-        self.paint_jobs = egui_ctx.0.tessellate(shapes);
+    paint_jobs.0 = egui_ctx.0.tessellate(shapes);
 
-        let window = if let Some(window) = windows.get_primary() {
-            winit_windows
-                .get_window(window.id())
-                .expect("Failed to get primary window")
-        } else {
-            return;
-        };
+    state.handle_platform_output(window, &egui_ctx.0, platform_output);
 
-        platform.handle_platform_output(window, &egui_ctx.0, platform_output);
-
-        for (id, image_delta) in textures_delta.set {
-            render_pass
-                .0
-                .update_texture(&renderer.device, &renderer.queue, id, &image_delta);
-        }
-
-        render_pass.0.update_buffers(
-            &renderer.device,
-            &renderer.queue,
-            &self.paint_jobs,
-            &screen_descriptor.0,
-        );
-    }
-
-    fn render(&self, world: &World, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {
-        let screen_descriptor = world.resource::<EguiScreenDesciptorRes>();
-        let render_pass = world.non_send_resource::<EguiRenderPassRes>();
-
+    for (id, image_delta) in textures_delta.set {
         render_pass
             .0
-            .execute(encoder, view, &self.paint_jobs, &screen_descriptor.0, None)
+            .update_texture(&renderer.device, &renderer.queue, id, &image_delta);
     }
+
+    render_pass.0.update_buffers(
+        &renderer.device,
+        &renderer.queue,
+        &paint_jobs.0,
+        &screen_descriptor.0,
+    );
+
+    render_pass
+        .0
+        .execute(encoder, &view.0, &paint_jobs.0, &screen_descriptor.0, None)
 }
 
 /// Wraps bevy mouse events and convert them back to fake winit events to send to the egui winit platform support
