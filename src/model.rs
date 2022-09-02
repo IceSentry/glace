@@ -86,7 +86,7 @@ impl Default for Material {
             base_color: Color::WHITE.as_rgba_f32().into(),
             alpha: 1.0,
             gloss: 1.0,
-            specular: Vec3::new(1.0, 1.0, 1.0),
+            specular: Vec3::ONE,
             diffuse_texture: image_from_color(Color::WHITE),
             normal_texture: None,
             specular_texture: None,
@@ -100,6 +100,8 @@ impl Material {
         Self {
             name: "Color Material".to_string(),
             base_color: color.as_rgba_f32().into(),
+            diffuse_texture: image_from_color(color),
+            alpha: color.a(),
             ..Default::default()
         }
     }

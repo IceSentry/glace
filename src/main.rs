@@ -19,7 +19,7 @@ use bevy::{
     input::{Input, InputPlugin},
     math::{Quat, Vec3},
     prelude::*,
-    window::{CursorMoved, WindowDescriptor, WindowPlugin},
+    window::{WindowDescriptor, WindowPlugin},
     winit::WinitPlugin,
     MinimalPlugins,
 };
@@ -58,6 +58,9 @@ struct ModelSettings {
     scale: f32,
     wireframe: bool,
 }
+
+#[derive(Component)]
+struct SpawnedModel;
 
 fn main() {
     env_logger::builder()
@@ -101,6 +104,7 @@ fn main() {
         .add_plugin(GltfLoaderPlugin)
         .add_plugin(FrameTimeDiagnosticsPlugin::default())
         .add_startup_system(spawn_light)
+        .add_startup_system(spawn_grid)
         .add_system(update_show_depth)
         // .add_system(cursor_moved)
         .add_system(update_light)
@@ -109,6 +113,29 @@ fn main() {
         .add_system(update_materials)
         .add_system(update_model)
         .run();
+}
+
+fn spawn_grid(mut commands: Commands, renderer: Res<WgpuRenderer>) {
+    let size = 10.0;
+    let plane = Model {
+        meshes: vec![shapes::plane::Plane {
+            resolution: size as usize,
+            size,
+        }
+        .mesh(&renderer.device)],
+        materials: vec![model::Material {
+            gloss: 1.0,
+            specular: Vec3::ZERO,
+            ..model::Material::from_color(Color::GRAY)
+        }],
+    };
+    commands.spawn_bundle((
+        plane,
+        Transform {
+            translation: Vec3::new(-(size / 2.), 0.0, -(size / 2.)),
+            ..default()
+        },
+    ));
 }
 
 fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
@@ -136,21 +163,6 @@ fn update_show_depth(
     }
 }
 
-#[allow(unused)]
-fn cursor_moved(
-    renderer: Res<WgpuRenderer>,
-    mut events: EventReader<CursorMoved>,
-    mut descriptor: ResMut<RenderPhase3dDescriptor>,
-) {
-    for event in events.iter() {
-        descriptor.clear_color = Color::rgb(
-            event.position.x as f32 / renderer.size.width as f32,
-            event.position.y as f32 / renderer.size.height as f32,
-            descriptor.clear_color.b(),
-        );
-    }
-}
-
 fn exit_on_esc(key_input: Res<Input<KeyCode>>, mut exit_events: EventWriter<AppExit>) {
     if key_input.just_pressed(KeyCode::Escape) {
         exit_events.send_default();
@@ -172,7 +184,10 @@ fn update_light(mut query: Query<&mut Light>, time: Res<Time>, settings: Res<Lig
     }
 }
 
-fn update_materials(mut query: Query<&mut Model>, settings: Res<GlobalMaterialSettings>) {
+fn update_materials(
+    mut query: Query<&mut Model, With<SpawnedModel>>,
+    settings: Res<GlobalMaterialSettings>,
+) {
     if !settings.is_changed() {
         return;
     }
@@ -186,7 +201,7 @@ fn update_materials(mut query: Query<&mut Model>, settings: Res<GlobalMaterialSe
 
 fn update_model(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut Transform), With<Model>>,
+    mut query: Query<(Entity, &mut Transform), (With<Model>, With<SpawnedModel>)>,
     settings: Res<ModelSettings>,
 ) {
     if !settings.is_changed() {
@@ -227,6 +242,7 @@ fn settings_ui(
                                 obj: asset_server.load(&format!("models/obj/{model_name}")),
                             })
                             .insert(Transform::default())
+                            .insert(SpawnedModel)
                             .id();
                         *spawned_entity = Some(entity);
                     };
@@ -268,6 +284,7 @@ fn settings_ui(
                                 gltf: asset_server.load(&format!("models/gltf/{model_name}")),
                             })
                             .insert(Transform::default())
+                            .insert(SpawnedModel)
                             .id();
                         *spawned_entity = Some(entity);
                     };
@@ -308,6 +325,7 @@ fn settings_ui(
                 gltf: asset_server.load("models/gltf/FlightHelmet/FlightHelmet.gltf"),
             })
             .insert(Transform::default())
+            .insert(SpawnedModel)
             .id();
         *spawned_entity = Some(entity);
     }
@@ -366,7 +384,6 @@ fn settings_ui(
                     let frame_time = diagnostics
                         .get(FrameTimeDiagnosticsPlugin::FRAME_TIME)
                         .and_then(Diagnostic::average);
-
                     let (fps, frame_time) = match (fps, frame_time) {
                         (Some(fps), Some(frame_time)) => (fps, frame_time),
                         _ => return,
