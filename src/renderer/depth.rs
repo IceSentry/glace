@@ -8,7 +8,7 @@ use super::{
     plugin::{RenderLabel, RendererStage, WgpuEncoder, WgpuView},
     DepthTexture, WgpuRenderer,
 };
-use crate::texture::Texture;
+use crate::{mesh::Vertex, model::ModelMesh, shapes::quad::FullscreenQuad, texture::Texture};
 
 const DEFAULT_NEAR: f32 = 0.1;
 const DEFAULT_FAR: f32 = 1000.0;
@@ -55,56 +55,6 @@ fn render(
     depth_pass.render(&view.0, encoder);
 }
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Vertex {
-    pub position: [f32; 3],
-    pub uv: [f32; 2],
-}
-
-impl Vertex {
-    pub fn layout<'a>() -> wgpu::VertexBufferLayout<'a> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as u64,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-            ],
-        }
-    }
-}
-
-// This is just a quad
-const DEPTH_VERTICES: &[Vertex] = &[
-    Vertex {
-        position: [-1.0, -1.0, 0.0],
-        uv: [0.0, 1.0],
-    },
-    Vertex {
-        position: [1.0, -1.0, 0.0],
-        uv: [1.0, 1.0],
-    },
-    Vertex {
-        position: [1.0, 1.0, 0.0],
-        uv: [1.0, 0.0],
-    },
-    Vertex {
-        position: [-1.0, 1.0, 0.0],
-        uv: [0.0, 0.0],
-    },
-];
-
-const DEPTH_INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
-
 #[derive(ShaderType)]
 struct DepthPassMaterial {
     near: f32,
@@ -115,10 +65,8 @@ struct DepthPassMaterial {
 pub struct DepthPass {
     layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    num_depth_indices: u32,
     render_pipeline: wgpu::RenderPipeline,
+    mesh: ModelMesh,
 }
 
 impl DepthPass {
@@ -133,21 +81,6 @@ impl DepthPass {
                 far: DEFAULT_FAR,
             },
         );
-
-        let vertex_buffer = renderer
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Depth Pass VB"),
-                contents: bytemuck::cast_slice(DEPTH_VERTICES),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-        let index_buffer = renderer
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Depth Pass IB"),
-                contents: bytemuck::cast_slice(DEPTH_INDICES),
-                usage: wgpu::BufferUsages::INDEX,
-            });
 
         let pipeline_layout =
             renderer
@@ -170,10 +103,8 @@ impl DepthPass {
         Self {
             layout,
             bind_group,
-            vertex_buffer,
-            index_buffer,
-            num_depth_indices: DEPTH_INDICES.len() as u32,
             render_pipeline,
+            mesh: FullscreenQuad.mesh(&renderer.device),
         }
     }
 
@@ -191,7 +122,7 @@ impl DepthPass {
 
     pub fn render(&self, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Depth Visual Render Pass"),
+            label: Some("Depth Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view,
                 resolve_target: None,
@@ -204,9 +135,9 @@ impl DepthPass {
         });
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[]);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-        render_pass.draw_indexed(0..self.num_depth_indices, 0, 0..1);
+        render_pass.set_vertex_buffer(0, self.mesh.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        render_pass.draw_indexed(0..self.mesh.num_elements, 0, 0..1);
     }
 
     fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {

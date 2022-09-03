@@ -1,4 +1,3 @@
-
 struct DepthPassMaterial {
     near: f32,
     far: f32,
@@ -13,7 +12,10 @@ var depth_sampler: sampler;
 
 struct Vertex {
     @location(0) position: vec3<f32>,
-    @location(1) uv: vec2<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) uv: vec2<f32>,
+    @location(3) tangent: vec3<f32>,
+    @location(4) bitangent: vec3<f32>,
 }
 
 struct VertexOutput {

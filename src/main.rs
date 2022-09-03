@@ -124,15 +124,14 @@ fn spawn_grid(mut commands: Commands, renderer: Res<WgpuRenderer>) {
             ..model::Material::from_color(Color::GRAY)
         }],
     };
-    commands
-        .spawn_bundle((
-            plane,
-            Transform {
-                translation: Vec3::new(-(size / 2.), 0.0, -(size / 2.)),
-                ..default()
-            },
-        ))
-        .insert(Wireframe);
+    commands.spawn_bundle((
+        plane,
+        Transform {
+            translation: Vec3::new(-(size / 2.), 0.0, -(size / 2.)),
+            ..default()
+        },
+        Wireframe,
+    ));
 }
 
 fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
