@@ -5,7 +5,7 @@ use glace::{
     egui_plugin::EguiPlugin,
     light::Light,
     model::{self, Model},
-    renderer::{plugin::WgpuRendererPlugin, wireframe::Wireframe, GlaceClearColor, WgpuRenderer},
+    renderer::{wireframe::Wireframe, GlaceClearColor, WgpuRenderer, WgpuRendererPlugin},
     shapes,
 };
 

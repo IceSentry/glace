@@ -5,8 +5,7 @@ use bevy::{
 use wgpu::util::DeviceExt;
 
 use super::{
-    plugin::{RenderLabel, RendererStage, WgpuEncoder, WgpuView},
-    DepthTexture, WgpuRenderer,
+    DepthTexture, RenderLabel, RendererStage, WgpuEncoder, WgpuRenderer, WgpuView, SAMPLE_COUNT,
 };
 use crate::{mesh::Vertex, model::ModelMesh, shapes::quad::FullscreenQuad, texture::Texture};
 
@@ -21,13 +20,14 @@ pub struct DepthPassSettings {
 pub struct DepthPassPlugin;
 impl Plugin for DepthPassPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
-        app.add_startup_system_to_stage(RendererStage::Init, setup)
-            .add_system_to_stage(
-                RendererStage::Render,
-                render
-                    .label(RenderLabel::Depth)
-                    .after(RenderLabel::Wireframe),
-            )
+        app
+            // .add_startup_system_to_stage(RendererStage::Init, setup)
+            // .add_system_to_stage(
+            //     RendererStage::Render,
+            //     render
+            //         .label(RenderLabel::Depth)
+            //         .after(RenderLabel::Wireframe),
+            // )
             .init_resource::<DepthPassSettings>();
     }
 }
@@ -52,7 +52,22 @@ fn render(
         return;
     };
 
-    depth_pass.render(&view.0, encoder);
+    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("Depth Render Pass"),
+        color_attachments: &[Some(view.get_color_attachment(wgpu::Operations {
+            load: wgpu::LoadOp::Load,
+            store: SAMPLE_COUNT == 1,
+        }))],
+        depth_stencil_attachment: None,
+    });
+    render_pass.set_pipeline(&depth_pass.render_pipeline);
+    render_pass.set_bind_group(0, &depth_pass.bind_group, &[]);
+    render_pass.set_vertex_buffer(0, depth_pass.mesh.vertex_buffer.slice(..));
+    render_pass.set_index_buffer(
+        depth_pass.mesh.index_buffer.slice(..),
+        wgpu::IndexFormat::Uint32,
+    );
+    render_pass.draw_indexed(0..depth_pass.mesh.num_elements, 0, 0..1);
 }
 
 #[derive(ShaderType)]
@@ -98,6 +113,7 @@ impl DepthPass {
             &[Vertex::layout()],
             None,
             wgpu::BlendState::REPLACE,
+            SAMPLE_COUNT,
         );
 
         Self {
@@ -118,26 +134,6 @@ impl DepthPass {
                 far: DEFAULT_FAR,
             },
         );
-    }
-
-    pub fn render(&self, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Depth Render Pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: true,
-                },
-            })],
-            depth_stencil_attachment: None,
-        });
-        render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_bind_group(0, &self.bind_group, &[]);
-        render_pass.set_vertex_buffer(0, self.mesh.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        render_pass.draw_indexed(0..self.mesh.num_elements, 0, 0..1);
     }
 
     fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {

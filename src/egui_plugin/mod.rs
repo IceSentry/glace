@@ -8,8 +8,7 @@ use bevy::{
 
 use self::custom_egui_winit::EguiWinitState;
 use crate::renderer::{
-    plugin::{RenderLabel, RendererStage, WgpuEncoder, WgpuView},
-    WgpuRenderer,
+    RenderLabel, RendererStage, WgpuEncoder, WgpuRenderer, WgpuView, SAMPLE_COUNT,
 };
 
 mod custom_egui_winit;
@@ -34,7 +33,9 @@ impl Plugin for EguiPlugin {
             .add_system_to_stage(CoreStage::PreUpdate, begin_frame)
             .add_system_to_stage(
                 RendererStage::Render,
-                render.label(RenderLabel::Egui).after(RenderLabel::Depth),
+                render
+                    .label(RenderLabel::Egui)
+                    .after(RenderLabel::Wireframe),
             )
             .add_system(handle_mouse_events)
             .add_system(on_exit);
@@ -73,7 +74,6 @@ fn setup(mut commands: Commands, windows: Res<Windows>) {
     }
 
     commands.insert_resource(EguiCtxRes(ctx));
-
     commands.insert_resource(PaintJobs(vec![]));
 }
 
@@ -82,7 +82,7 @@ fn setup_render_pass(world: &mut World) {
     let pass = egui_wgpu::renderer::RenderPass::new(
         &renderer.device,
         wgpu::TextureFormat::Bgra8UnormSrgb,
-        1,
+        SAMPLE_COUNT,
     );
     world.insert_non_send_resource(EguiRenderPassRes(pass));
 }
@@ -151,9 +151,21 @@ fn render(
         &screen_descriptor.0,
     );
 
+    let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        color_attachments: &[Some(view.get_color_attachment(wgpu::Operations {
+            load: wgpu::LoadOp::Load,
+            store: true,
+        }))],
+        depth_stencil_attachment: None,
+        label: Some("egui main render pass"),
+    });
+    rpass.push_debug_group("egui_pass");
+
     render_pass
         .0
-        .execute(encoder, &view.0, &paint_jobs.0, &screen_descriptor.0, None)
+        .execute_with_renderpass(&mut rpass, &paint_jobs.0, &screen_descriptor.0);
+
+    rpass.pop_debug_group();
 }
 
 /// Wraps bevy mouse events and convert them back to fake winit events to send to the egui winit platform support

@@ -5,8 +5,8 @@ use super::{
         material::{self, GpuModelMaterials},
         mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout},
     },
-    plugin::{RenderLabel, RendererStage, WgpuEncoder, WgpuView},
-    DepthTexture, GlaceClearColor, WgpuRenderer,
+    create_multisampled_framebuffer, DepthTexture, GlaceClearColor, RenderLabel, RendererStage,
+    WgpuEncoder, WgpuRenderer, WgpuView, SAMPLE_COUNT,
 };
 use crate::{
     instances::{InstanceBuffer, Instances},
@@ -21,10 +21,11 @@ use crate::{
 pub struct Transparent;
 
 #[derive(Resource)]
-struct OpaquePass {
+struct Base3dPass {
     render_pipeline: wgpu::RenderPipeline,
     light_render_pipeline: wgpu::RenderPipeline,
     transparent_render_pipeline: wgpu::RenderPipeline,
+    // multisampled_framebuffer: wgpu::TextureView,
 }
 
 pub struct RenderPhase3dPlugin;
@@ -40,11 +41,14 @@ fn setup(
     renderer: Res<WgpuRenderer>,
     mesh_view_layout: Res<MeshViewBindGroupLayout>,
 ) {
+    // let multisampled_framebuffer =
+    // create_multisampled_framebuffer(&renderer.device, &renderer.config, SAMPLE_COUNT);
+
     let render_pipeline_layout =
         renderer
             .device
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
+                label: Some("base_3d Pipeline Layout"),
                 bind_group_layouts: &[
                     &mesh_view_layout.0,
                     &material::bind_group_layout(&renderer.device),
@@ -66,6 +70,7 @@ fn setup(
             bias: wgpu::DepthBiasState::default(),
         }),
         wgpu::BlendState::REPLACE,
+        SAMPLE_COUNT,
     );
 
     let transparent_render_pipeline = renderer.create_render_pipeline(
@@ -81,6 +86,7 @@ fn setup(
             bias: wgpu::DepthBiasState::default(),
         }),
         wgpu::BlendState::ALPHA_BLENDING,
+        SAMPLE_COUNT,
     );
 
     let light_render_pipeline = renderer.create_render_pipeline(
@@ -102,12 +108,14 @@ fn setup(
             bias: wgpu::DepthBiasState::default(),
         }),
         wgpu::BlendState::REPLACE,
+        SAMPLE_COUNT,
     );
 
-    commands.insert_resource(OpaquePass {
+    commands.insert_resource(Base3dPass {
         render_pipeline,
         light_render_pipeline,
         transparent_render_pipeline,
+        // multisampled_framebuffer,
     });
 }
 
@@ -116,7 +124,7 @@ fn render(
     depth_texture: Res<DepthTexture>,
     mut encoder: ResMut<WgpuEncoder>,
     view: Res<WgpuView>,
-    opaque_pass: Res<OpaquePass>,
+    pass: Res<Base3dPass>,
     light_query: Query<&Model, With<Light>>,
     model_query: Query<
         (
@@ -136,20 +144,11 @@ fn render(
     };
 
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("Opaque Render Pass"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &view.0,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: clear_color.0.r() as f64,
-                    g: clear_color.0.g() as f64,
-                    b: clear_color.0.b() as f64,
-                    a: clear_color.0.a() as f64,
-                }),
-                store: true,
-            },
-        })],
+        label: Some("Base 3d Render Pass"),
+        color_attachments: &[Some(view.get_color_attachment(wgpu::Operations {
+            load: wgpu::LoadOp::Clear(clear_color.0.into()),
+            store: true,
+        }))],
         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
             view: &depth_texture.0.view,
             depth_ops: Some(wgpu::Operations {
@@ -161,7 +160,7 @@ fn render(
     });
 
     // TODO figure out how to sort models
-    render_pass.set_pipeline(&opaque_pass.render_pipeline);
+    render_pass.set_pipeline(&pass.render_pipeline);
     for (model, instance_buffer, instances, gpu_materials) in &model_query {
         // The draw function also uses the instance buffer under the hood it simply is of size 1
         render_pass.set_vertex_buffer(1, instance_buffer.0.slice(..));
@@ -175,7 +174,7 @@ fn render(
     }
 
     // TODO I need a better way to identify transparent meshes in a model
-    render_pass.set_pipeline(&opaque_pass.transparent_render_pipeline);
+    render_pass.set_pipeline(&pass.transparent_render_pipeline);
     for (model, instance_buffer, instances, gpu_materials) in &model_query {
         // The draw function also uses the instance buffer under the hood it simply is of size 1
         render_pass.set_vertex_buffer(1, instance_buffer.0.slice(..));
@@ -188,7 +187,7 @@ fn render(
         );
     }
 
-    render_pass.set_pipeline(&opaque_pass.light_render_pipeline);
+    render_pass.set_pipeline(&pass.light_render_pipeline);
     for light_model in &light_query {
         draw_light_model(&mut render_pass, light_model, &mesh_view_bind_group.0);
     }

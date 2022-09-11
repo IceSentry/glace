@@ -12,11 +12,9 @@ use crate::{
 
 use super::{
     bind_groups::mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout},
-    plugin::{RenderLabel, RendererStage, WgpuEncoder, WgpuView},
-    DepthTexture, WgpuRenderer,
+    DepthTexture, RenderLabel, RendererStage, WgpuEncoder, WgpuRenderer, WgpuView, SAMPLE_COUNT,
 };
 
-const SAMPLE_COUNT: usize = 1;
 const USE_DEPTH: bool = true;
 
 #[derive(Component)]
@@ -25,7 +23,6 @@ pub struct Wireframe;
 #[derive(Resource)]
 pub struct WireframePhase {
     pub render_pipeline: wgpu::RenderPipeline,
-    pub multisampled_framebuffer: wgpu::TextureView,
 }
 
 pub struct WireframePlugin;
@@ -60,9 +57,6 @@ fn setup(
             bind_group_layouts: &[&mesh_view_layout.0],
             push_constant_ranges: &[],
         });
-
-    let multisampled_framebuffer =
-        create_multisampled_framebuffer(&renderer.device, &renderer.config, SAMPLE_COUNT as u32);
 
     let pipeline = renderer
         .device
@@ -112,7 +106,6 @@ fn setup(
 
     commands.insert_resource(WireframePhase {
         render_pipeline: pipeline,
-        multisampled_framebuffer,
     });
 }
 
@@ -133,31 +126,12 @@ fn render(
         return;
     };
 
-    let rpass_color_attachment = if SAMPLE_COUNT == 1 {
-        wgpu::RenderPassColorAttachment {
-            view: &view.0,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Load,
-                store: true,
-            },
-        }
-    } else {
-        wgpu::RenderPassColorAttachment {
-            view: &phase.multisampled_framebuffer,
-            resolve_target: Some(&view.0),
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Load,
-                // Storing pre-resolve MSAA data is unnecessary if it isn't used later.
-                // On tile-based GPU, avoid store can reduce your app's memory footprint.
-                store: false,
-            },
-        }
-    };
-
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: None,
-        color_attachments: &[Some(rpass_color_attachment)],
+        color_attachments: &[Some(view.get_color_attachment(wgpu::Operations {
+            load: wgpu::LoadOp::Load,
+            store: true,
+        }))],
         depth_stencil_attachment: if USE_DEPTH {
             Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &depth_texture.0.view,
@@ -188,29 +162,4 @@ fn render(
             );
         }
     }
-}
-
-fn create_multisampled_framebuffer(
-    device: &wgpu::Device,
-    config: &wgpu::SurfaceConfiguration,
-    sample_count: u32,
-) -> wgpu::TextureView {
-    let multisampled_texture_extent = wgpu::Extent3d {
-        width: config.width,
-        height: config.height,
-        depth_or_array_layers: 1,
-    };
-    let multisampled_frame_descriptor = &wgpu::TextureDescriptor {
-        size: multisampled_texture_extent,
-        mip_level_count: 1,
-        sample_count,
-        dimension: wgpu::TextureDimension::D2,
-        format: config.format,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        label: None,
-    };
-
-    device
-        .create_texture(multisampled_frame_descriptor)
-        .create_view(&wgpu::TextureViewDescriptor::default())
 }

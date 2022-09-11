@@ -8,7 +8,7 @@ use glace::{
     gltf_loader::{GltfBundle, GltfLoaderPlugin},
     light::Light,
     model::Model,
-    renderer::{plugin::WgpuRendererPlugin, GlaceClearColor, WgpuRenderer},
+    renderer::{GlaceClearColor, WgpuRenderer, WgpuRendererPlugin},
     shapes,
 };
 

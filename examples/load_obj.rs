@@ -10,7 +10,7 @@ use glace::{
     model::Model,
     obj_loader::{ObjBundle, ObjLoaderPlugin},
     renderer::GlaceClearColor,
-    renderer::{plugin::WgpuRendererPlugin, WgpuRenderer},
+    renderer::{WgpuRenderer, WgpuRendererPlugin},
     shapes,
 };
 

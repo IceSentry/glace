@@ -19,8 +19,8 @@ use crate::{
     model::Model,
     obj_loader::{ObjBundle, ObjLoaderPlugin},
     renderer::{
-        depth::DepthPassSettings, plugin::WgpuRendererPlugin, wireframe::Wireframe,
-        wireframe::WireframePlugin, GlaceClearColor, WgpuRenderer,
+        depth::DepthPassSettings, wireframe::Wireframe, wireframe::WireframePlugin,
+        GlaceClearColor, WgpuRenderer, WgpuRendererPlugin,
     },
 };
 
@@ -96,7 +96,6 @@ fn main() {
         .add_plugin(WgpuRendererPlugin)
         .add_plugin(AssetPlugin)
         .add_plugin(EguiPlugin)
-        .add_plugin(WireframePlugin)
         .add_plugin(ObjLoaderPlugin)
         .add_plugin(GltfLoaderPlugin)
         .add_plugin(FrameTimeDiagnosticsPlugin::default())
