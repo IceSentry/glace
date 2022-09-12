@@ -16,10 +16,10 @@ It can also be used to showcase integrating a custom renderer to bevy.
 * Partially load gltf
 * egui integration
 * 3d camera controller
+* MSAA kinda works, but breaks when trying to render the depth texture
 
 ## TODOs
 
-* MSAA
 * Use bevy log plugin and tracing
 * Use bevy mesh and material abstractions
 * PBR
