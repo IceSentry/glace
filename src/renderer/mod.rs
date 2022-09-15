@@ -11,15 +11,11 @@ use crate::{
 };
 
 use self::{
-    base_3d::RenderPhase3dPlugin,
-    bind_groups::mesh_view::CameraUniform,
-    depth::{DepthPass, DepthPassPlugin},
-    wireframe::WireframePlugin,
+    base_3d::RenderPhase3dPlugin, bind_groups::mesh_view::CameraUniform, wireframe::WireframePlugin,
 };
 
 pub mod base_3d;
 pub mod bind_groups;
-pub mod depth;
 pub mod wireframe;
 
 #[derive(Resource)]
@@ -42,7 +38,6 @@ pub enum RendererStage {
 pub enum RenderLabel {
     Base3d,
     Wireframe,
-    Depth,
     Egui,
 }
 
@@ -82,7 +77,6 @@ impl Plugin for WgpuRendererPlugin {
                 SystemStage::parallel(),
             )
             .add_plugin(RenderPhase3dPlugin)
-            .add_plugin(DepthPassPlugin)
             .add_plugin(WireframePlugin)
             .add_system_to_stage(RendererStage::StartRender, start_render)
             .add_system_to_stage(RendererStage::EndRender, end_render)
@@ -207,7 +201,6 @@ fn resize(
     mut renderer: ResMut<WgpuRenderer>,
     mut events: EventReader<WindowResized>,
     windows: Res<Windows>,
-    // mut depth_pass: ResMut<DepthPass>,
     mut depth_texture: ResMut<DepthTexture>,
     mut camera_uniform: ResMut<CameraUniform>,
     mut camera: ResMut<Camera>,
@@ -225,7 +218,6 @@ fn resize(
         renderer.resize(PhysicalSize { width, height });
 
         depth_texture.0 = Texture::create_depth_texture(&renderer.device, &renderer.config);
-        // depth_pass.resize(&renderer.device, &depth_texture.0);
 
         // Should probably be done in EguiPlugin
         screen_descriptor.0.size_in_pixels = [width as u32, height as u32];

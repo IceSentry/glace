@@ -5,8 +5,8 @@ use super::{
         material::{self, GpuModelMaterials},
         mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout},
     },
-    create_multisampled_framebuffer, DepthTexture, GlaceClearColor, RenderLabel, RendererStage,
-    WgpuEncoder, WgpuRenderer, WgpuView, SAMPLE_COUNT,
+    DepthTexture, GlaceClearColor, RenderLabel, RendererStage, WgpuEncoder, WgpuRenderer, WgpuView,
+    SAMPLE_COUNT,
 };
 use crate::{
     instances::{InstanceBuffer, Instances},
@@ -41,9 +41,6 @@ fn setup(
     renderer: Res<WgpuRenderer>,
     mesh_view_layout: Res<MeshViewBindGroupLayout>,
 ) {
-    // let multisampled_framebuffer =
-    // create_multisampled_framebuffer(&renderer.device, &renderer.config, SAMPLE_COUNT);
-
     let render_pipeline_layout =
         renderer
             .device
@@ -115,7 +112,6 @@ fn setup(
         render_pipeline,
         light_render_pipeline,
         transparent_render_pipeline,
-        // multisampled_framebuffer,
     });
 }
 

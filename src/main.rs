@@ -18,10 +18,7 @@ use crate::{
     light::Light,
     model::Model,
     obj_loader::{ObjBundle, ObjLoaderPlugin},
-    renderer::{
-        depth::DepthPassSettings, wireframe::Wireframe, wireframe::WireframePlugin,
-        GlaceClearColor, WgpuRenderer, WgpuRendererPlugin,
-    },
+    renderer::{wireframe::Wireframe, GlaceClearColor, WgpuRenderer, WgpuRendererPlugin},
 };
 
 mod camera;
@@ -211,7 +208,6 @@ fn settings_ui(
     mut light_settings: ResMut<LightSettings>,
     mut global_material_settings: ResMut<GlobalMaterialSettings>,
     mut model_settings: ResMut<ModelSettings>,
-    mut depth_settings: ResMut<DepthPassSettings>,
     diagnostics: ResMut<Diagnostics>,
     mut spawned_entity: Local<Option<Entity>>,
 ) {
@@ -345,11 +341,6 @@ fn settings_ui(
         ui.label("scale");
         ui.add(egui::Slider::new(&mut model_settings.scale, 0.025..=5.0));
         ui.checkbox(&mut model_settings.wireframe, "wireframe");
-
-        ui.separator();
-
-        ui.heading("shader");
-        ui.checkbox(&mut depth_settings.show_depth_buffer, "show depth buffer");
     });
 
     egui::Area::new("Performance area")
