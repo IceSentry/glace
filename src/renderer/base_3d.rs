@@ -1,13 +1,15 @@
-use bevy::prelude::*;
+use bevy::app::prelude::*;
+use bevy::ecs::prelude::*;
 
 use super::{
     bind_groups::{
         material::{self, GpuModelMaterials},
         mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout},
     },
-    DepthTexture, GlaceClearColor, RenderLabel, RendererStage, WgpuEncoder, WgpuRenderer, WgpuView,
-    SAMPLE_COUNT,
+    DepthTexture, GlaceClearColor, Msaa, RenderLabel, RendererStage, WgpuEncoder, WgpuRenderer,
+    WgpuView,
 };
+
 use crate::{
     instances::{InstanceBuffer, Instances},
     light::{draw_light_model, Light},
@@ -40,6 +42,7 @@ fn setup(
     mut commands: Commands,
     renderer: Res<WgpuRenderer>,
     mesh_view_layout: Res<MeshViewBindGroupLayout>,
+    msaa: Res<Msaa>,
 ) {
     let render_pipeline_layout =
         renderer
@@ -67,7 +70,7 @@ fn setup(
             bias: wgpu::DepthBiasState::default(),
         }),
         wgpu::BlendState::REPLACE,
-        SAMPLE_COUNT,
+        msaa.samples,
     );
 
     let transparent_render_pipeline = renderer.create_render_pipeline(
@@ -83,7 +86,7 @@ fn setup(
             bias: wgpu::DepthBiasState::default(),
         }),
         wgpu::BlendState::ALPHA_BLENDING,
-        SAMPLE_COUNT,
+        msaa.samples,
     );
 
     let light_render_pipeline = renderer.create_render_pipeline(
@@ -105,7 +108,7 @@ fn setup(
             bias: wgpu::DepthBiasState::default(),
         }),
         wgpu::BlendState::REPLACE,
-        SAMPLE_COUNT,
+        msaa.samples,
     );
 
     commands.insert_resource(Base3dPass {

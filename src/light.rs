@@ -1,9 +1,5 @@
+use bevy::{ecs::prelude::*, math::prelude::*, render::color::Color};
 use std::ops::Range;
-
-use bevy::{
-    math::Vec3,
-    prelude::{Color, Component},
-};
 
 use crate::model::{Model, ModelMesh};
 

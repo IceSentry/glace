@@ -1,5 +1,6 @@
-use bevy::prelude::*;
 use std::borrow::Cow;
+
+use bevy::{app::prelude::*, ecs::prelude::*, utils::prelude::*};
 
 use crate::{
     instances::{InstanceBuffer, Instances},
@@ -12,10 +13,8 @@ use crate::{
 
 use super::{
     bind_groups::mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout},
-    DepthTexture, RenderLabel, RendererStage, WgpuEncoder, WgpuRenderer, WgpuView, SAMPLE_COUNT,
+    DepthTexture, Msaa, RenderLabel, RendererStage, WgpuEncoder, WgpuRenderer, WgpuView,
 };
-
-const USE_DEPTH: bool = true;
 
 #[derive(Component)]
 pub struct Wireframe;
@@ -42,6 +41,7 @@ fn setup(
     mut commands: Commands,
     renderer: Res<WgpuRenderer>,
     mesh_view_layout: Res<MeshViewBindGroupLayout>,
+    msaa: Res<Msaa>,
 ) {
     let shader = renderer
         .device
@@ -83,22 +83,18 @@ fn setup(
                 polygon_mode: wgpu::PolygonMode::Line,
                 ..default()
             },
-            depth_stencil: if USE_DEPTH {
-                Some(wgpu::DepthStencilState {
-                    format: Texture::DEPTH_FORMAT,
-                    depth_write_enabled: false,
-                    depth_compare: wgpu::CompareFunction::Less,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState {
-                        slope_scale: -1.0,
-                        ..default()
-                    },
-                })
-            } else {
-                None
-            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState {
+                    slope_scale: -1.0,
+                    ..default()
+                },
+            }),
             multisample: wgpu::MultisampleState {
-                count: SAMPLE_COUNT as u32,
+                count: msaa.samples,
                 ..default()
             },
             multiview: None,
@@ -132,18 +128,14 @@ fn render(
             load: wgpu::LoadOp::Load,
             store: true,
         }))],
-        depth_stencil_attachment: if USE_DEPTH {
-            Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &depth_texture.0.view,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: true,
-                }),
-                stencil_ops: None,
-            })
-        } else {
-            None
-        },
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: &depth_texture.0.view,
+            depth_ops: Some(wgpu::Operations {
+                load: wgpu::LoadOp::Load,
+                store: true,
+            }),
+            stencil_ops: None,
+        }),
     });
 
     render_pass.set_pipeline(&phase.render_pipeline);

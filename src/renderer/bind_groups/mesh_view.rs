@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{ecs::prelude::*, math::prelude::*, render::color::Color};
 use wgpu::util::DeviceExt;
 
 use crate::{camera::Camera, light::Light, renderer::WgpuRenderer};

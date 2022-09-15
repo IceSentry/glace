@@ -1,15 +1,16 @@
 use bevy::{
-    app::AppExit,
-    input::mouse::{MouseButtonInput, MouseWheel},
-    prelude::*,
-    window::WindowCloseRequested,
+    app::{prelude::*, AppExit},
+    ecs::prelude::*,
+    input::{
+        mouse::{MouseButtonInput, MouseWheel},
+        prelude::*,
+    },
+    window::{prelude::*, WindowCloseRequested},
     winit::WinitWindows,
 };
 
 use self::custom_egui_winit::EguiWinitState;
-use crate::renderer::{
-    RenderLabel, RendererStage, WgpuEncoder, WgpuRenderer, WgpuView, SAMPLE_COUNT,
-};
+use crate::renderer::{Msaa, RenderLabel, RendererStage, WgpuEncoder, WgpuRenderer, WgpuView};
 
 mod custom_egui_winit;
 
@@ -78,11 +79,12 @@ fn setup(mut commands: Commands, windows: Res<Windows>) {
 }
 
 fn setup_render_pass(world: &mut World) {
+    let msaa = world.resource::<Msaa>();
     let renderer = world.resource::<WgpuRenderer>();
     let pass = egui_wgpu::renderer::RenderPass::new(
         &renderer.device,
         wgpu::TextureFormat::Bgra8UnormSrgb,
-        SAMPLE_COUNT,
+        msaa.samples,
     );
     world.insert_non_send_resource(EguiRenderPassRes(pass));
 }

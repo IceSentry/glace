@@ -2,13 +2,21 @@
 #![allow(clippy::too_many_arguments)]
 
 use bevy::{
-    app::AppExit,
-    asset::AssetPlugin,
+    app::{prelude::*, AppExit},
+    asset::{prelude::*, AssetPlugin},
     diagnostic::{Diagnostic, Diagnostics, FrameTimeDiagnosticsPlugin},
+    ecs::prelude::*,
+    hierarchy::prelude::*,
+    input::prelude::*,
     input::InputPlugin,
-    prelude::*,
-    window::WindowPlugin,
+    math::prelude::*,
+    render::color::Color,
+    time::prelude::*,
+    transform::prelude::*,
+    utils::prelude::*,
+    window::{prelude::*, WindowPlugin},
     winit::WinitPlugin,
+    MinimalPlugins,
 };
 
 use crate::{
@@ -18,7 +26,7 @@ use crate::{
     light::Light,
     model::Model,
     obj_loader::{ObjBundle, ObjLoaderPlugin},
-    renderer::{wireframe::Wireframe, GlaceClearColor, WgpuRenderer, WgpuRendererPlugin},
+    renderer::{wireframe::Wireframe, GlaceClearColor, Msaa, WgpuRenderer, WgpuRendererPlugin},
 };
 
 mod camera;
@@ -85,6 +93,7 @@ fn main() {
             scale: 1.0,
             wireframe: false,
         })
+        .insert_resource(Msaa { samples: 4 })
         .init_resource::<Diagnostics>()
         .add_plugins(MinimalPlugins)
         .add_plugin(WindowPlugin::default())

@@ -1,6 +1,4 @@
-use bevy::prelude::{
-    Added, Changed, Commands, Component, Entity, Or, Query, Res, Transform, With, Without,
-};
+use bevy::{ecs::prelude::*, transform::prelude::*};
 use wgpu::util::DeviceExt;
 
 use crate::{model::Model, renderer::WgpuRenderer, transform::to_raw};

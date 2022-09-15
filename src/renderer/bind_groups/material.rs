@@ -1,10 +1,8 @@
 use bevy::{
-    math::Vec4,
-    prelude::*,
-    render::render_resource::{
-        encase::{self, UniformBuffer},
-        ShaderType,
-    },
+    ecs::prelude::*,
+    math::prelude::*,
+    render::color::Color,
+    render::render_resource::{encase::UniformBuffer, ShaderType},
 };
 use wgpu::util::DeviceExt;
 
@@ -147,7 +145,7 @@ pub fn create_material_uniform(
             };
 
             let byte_buffer = Vec::new();
-            let mut uniform_buffer = encase::UniformBuffer::new(byte_buffer);
+            let mut uniform_buffer = UniformBuffer::new(byte_buffer);
             uniform_buffer.write(&uniform).unwrap();
 
             let buffer = renderer

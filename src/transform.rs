@@ -1,4 +1,4 @@
-use bevy::{math::Mat3, prelude::Transform};
+use bevy::{math::Mat3, transform::prelude::*};
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]

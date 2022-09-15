@@ -1,7 +1,5 @@
 use image::DynamicImage;
 
-use crate::renderer::SAMPLE_COUNT;
-
 #[derive(Debug)]
 pub struct Texture {
     pub texture: wgpu::Texture,
@@ -112,6 +110,7 @@ impl Texture {
     pub fn create_depth_texture(
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
+        sample_count: u32,
     ) -> Self {
         let size = wgpu::Extent3d {
             width: config.width,
@@ -122,7 +121,7 @@ impl Texture {
             label: Some("depth_texture"),
             size,
             mip_level_count: 1,
-            sample_count: SAMPLE_COUNT,
+            sample_count,
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEPTH_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,

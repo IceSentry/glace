@@ -1,4 +1,11 @@
-use bevy::{prelude::*, window::WindowResized, winit::WinitWindows};
+use bevy::{
+    app::prelude::*,
+    ecs::prelude::*,
+    render::color::Color,
+    utils::default,
+    window::{prelude::*, WindowResized},
+    winit::WinitWindows,
+};
 use futures_lite::future;
 use wgpu::{CommandEncoder, SurfaceTexture, TextureView};
 use winit::{dpi::PhysicalSize, window::Window};
@@ -24,7 +31,10 @@ pub struct DepthTexture(pub Texture);
 #[derive(Default, Resource)]
 pub struct GlaceClearColor(pub Color);
 
-pub const SAMPLE_COUNT: u32 = 4;
+#[derive(Resource, Default)]
+pub struct Msaa {
+    pub samples: u32,
+}
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, StageLabel)]
 pub enum RendererStage {
@@ -104,8 +114,9 @@ fn init_renderer(
     commands.insert_resource(renderer);
 }
 
-fn init_depth_texture(mut commands: Commands, renderer: Res<WgpuRenderer>) {
-    let depth_texture = Texture::create_depth_texture(&renderer.device, &renderer.config);
+fn init_depth_texture(mut commands: Commands, renderer: Res<WgpuRenderer>, msaa: Res<Msaa>) {
+    let depth_texture =
+        Texture::create_depth_texture(&renderer.device, &renderer.config, msaa.samples);
     commands.insert_resource(DepthTexture(depth_texture));
 }
 
@@ -134,7 +145,12 @@ impl WgpuView {
 #[derive(Resource)]
 pub struct WgpuEncoder(pub Option<CommandEncoder>);
 
-fn start_render(mut commands: Commands, renderer: Res<WgpuRenderer>, windows: Res<Windows>) {
+fn start_render(
+    mut commands: Commands,
+    renderer: Res<WgpuRenderer>,
+    windows: Res<Windows>,
+    msaa: Res<Msaa>,
+) {
     if windows.get_primary().is_none() {
         return;
     }
@@ -169,11 +185,11 @@ fn start_render(mut commands: Commands, renderer: Res<WgpuRenderer>, windows: Re
     commands.insert_resource(WgpuSurfaceTexture(Some(output)));
     commands.insert_resource(WgpuView {
         view,
-        sampled_view: if SAMPLE_COUNT > 1 {
+        sampled_view: if msaa.samples > 1 {
             Some(create_multisampled_framebuffer(
                 &renderer.device,
                 &renderer.config,
-                SAMPLE_COUNT,
+                msaa.samples,
             ))
         } else {
             None
@@ -205,6 +221,7 @@ fn resize(
     mut camera_uniform: ResMut<CameraUniform>,
     mut camera: ResMut<Camera>,
     mut screen_descriptor: ResMut<EguiScreenDesciptorRes>,
+    msaa: Res<Msaa>,
 ) {
     for event in events.iter() {
         let window = windows.get(event.id).expect("window not found");
@@ -217,7 +234,8 @@ fn resize(
 
         renderer.resize(PhysicalSize { width, height });
 
-        depth_texture.0 = Texture::create_depth_texture(&renderer.device, &renderer.config);
+        depth_texture.0 =
+            Texture::create_depth_texture(&renderer.device, &renderer.config, msaa.samples);
 
         // Should probably be done in EguiPlugin
         screen_descriptor.0.size_in_pixels = [width as u32, height as u32];

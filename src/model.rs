@@ -1,10 +1,7 @@
 use crate::{
     image_utils::image_from_color, mesh::Mesh, renderer::bind_groups::material::GpuModelMaterials,
 };
-use bevy::{
-    math::{Vec3, Vec4},
-    prelude::{Color, Component},
-};
+use bevy::{ecs::prelude::*, math::prelude::*, render::color::Color};
 use image::RgbaImage;
 use std::ops::Range;
 use wgpu::util::DeviceExt;

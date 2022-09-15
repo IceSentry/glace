@@ -1,4 +1,4 @@
-use bevy::prelude::Color;
+use bevy::render::color::Color;
 use image::{DynamicImage, Rgba, RgbaImage};
 
 pub fn image_from_color(color: Color) -> RgbaImage {
