@@ -27,13 +27,94 @@ struct Base3dPass {
     render_pipeline: wgpu::RenderPipeline,
     light_render_pipeline: wgpu::RenderPipeline,
     transparent_render_pipeline: wgpu::RenderPipeline,
-    // multisampled_framebuffer: wgpu::TextureView,
+}
+
+impl Base3dPass {
+    fn new(
+        renderer: &WgpuRenderer,
+        mesh_view_layout: &MeshViewBindGroupLayout,
+        sample_count: u32,
+    ) -> Self {
+        let render_pipeline_layout =
+            renderer
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("base_3d Pipeline Layout"),
+                    bind_group_layouts: &[
+                        &mesh_view_layout.0,
+                        &material::bind_group_layout(&renderer.device),
+                    ],
+                    push_constant_ranges: &[],
+                });
+
+        // TODO have a better way to attach draw commands to a pipeline
+        let render_pipeline = renderer.create_render_pipeline(
+            "Opaque Render Pipeline",
+            include_str!("shaders/shader.wgsl"),
+            &render_pipeline_layout,
+            &[mesh::Vertex::layout(), TransformRaw::layout()],
+            Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            wgpu::BlendState::REPLACE,
+            sample_count,
+        );
+
+        let transparent_render_pipeline = renderer.create_render_pipeline(
+            "Transparent Render Pipeline",
+            include_str!("shaders/shader.wgsl"),
+            &render_pipeline_layout,
+            &[mesh::Vertex::layout(), TransformRaw::layout()],
+            Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            wgpu::BlendState::ALPHA_BLENDING,
+            sample_count,
+        );
+
+        let light_render_pipeline = renderer.create_render_pipeline(
+            "Light Render Pipeline",
+            include_str!("shaders/light.wgsl"),
+            &renderer
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Light Pipeline Layout"),
+                    bind_group_layouts: &[&mesh_view_layout.0],
+                    push_constant_ranges: &[],
+                }),
+            &[mesh::Vertex::layout()],
+            Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            wgpu::BlendState::REPLACE,
+            sample_count,
+        );
+
+        Self {
+            render_pipeline,
+            light_render_pipeline,
+            transparent_render_pipeline,
+        }
+    }
 }
 
 pub struct RenderPhase3dPlugin;
 impl Plugin for RenderPhase3dPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system_to_stage(RendererStage::Init, setup)
+            .add_system_to_stage(RendererStage::Render, update_render_pass.before(render))
             .add_system_to_stage(RendererStage::Render, render.label(RenderLabel::Base3d));
     }
 }
@@ -44,78 +125,19 @@ fn setup(
     mesh_view_layout: Res<MeshViewBindGroupLayout>,
     msaa: Res<Msaa>,
 ) {
-    let render_pipeline_layout =
-        renderer
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("base_3d Pipeline Layout"),
-                bind_group_layouts: &[
-                    &mesh_view_layout.0,
-                    &material::bind_group_layout(&renderer.device),
-                ],
-                push_constant_ranges: &[],
-            });
+    commands.insert_resource(Base3dPass::new(&renderer, &mesh_view_layout, msaa.samples));
+}
 
-    // TODO have a better way to attach draw commands to a pipeline
-    let render_pipeline = renderer.create_render_pipeline(
-        "Opaque Render Pipeline",
-        include_str!("shaders/shader.wgsl"),
-        &render_pipeline_layout,
-        &[mesh::Vertex::layout(), TransformRaw::layout()],
-        Some(wgpu::DepthStencilState {
-            format: Texture::DEPTH_FORMAT,
-            depth_write_enabled: true,
-            depth_compare: wgpu::CompareFunction::Less,
-            stencil: wgpu::StencilState::default(),
-            bias: wgpu::DepthBiasState::default(),
-        }),
-        wgpu::BlendState::REPLACE,
-        msaa.samples,
-    );
-
-    let transparent_render_pipeline = renderer.create_render_pipeline(
-        "Transparent Render Pipeline",
-        include_str!("shaders/shader.wgsl"),
-        &render_pipeline_layout,
-        &[mesh::Vertex::layout(), TransformRaw::layout()],
-        Some(wgpu::DepthStencilState {
-            format: Texture::DEPTH_FORMAT,
-            depth_write_enabled: true,
-            depth_compare: wgpu::CompareFunction::Less,
-            stencil: wgpu::StencilState::default(),
-            bias: wgpu::DepthBiasState::default(),
-        }),
-        wgpu::BlendState::ALPHA_BLENDING,
-        msaa.samples,
-    );
-
-    let light_render_pipeline = renderer.create_render_pipeline(
-        "Light Render Pipeline",
-        include_str!("shaders/light.wgsl"),
-        &renderer
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Light Pipeline Layout"),
-                bind_group_layouts: &[&mesh_view_layout.0],
-                push_constant_ranges: &[],
-            }),
-        &[mesh::Vertex::layout()],
-        Some(wgpu::DepthStencilState {
-            format: Texture::DEPTH_FORMAT,
-            depth_write_enabled: false,
-            depth_compare: wgpu::CompareFunction::Less,
-            stencil: wgpu::StencilState::default(),
-            bias: wgpu::DepthBiasState::default(),
-        }),
-        wgpu::BlendState::REPLACE,
-        msaa.samples,
-    );
-
-    commands.insert_resource(Base3dPass {
-        render_pipeline,
-        light_render_pipeline,
-        transparent_render_pipeline,
-    });
+fn update_render_pass(
+    mut render_pass: ResMut<Base3dPass>,
+    msaa: Res<Msaa>,
+    mesh_view_layout: Res<MeshViewBindGroupLayout>,
+    renderer: Res<WgpuRenderer>,
+) {
+    if msaa.is_changed() {
+        log::info!("updating base_3d render pass");
+        *render_pass = Base3dPass::new(&renderer, &mesh_view_layout, msaa.samples);
+    }
 }
 
 fn render(
@@ -141,6 +163,8 @@ fn render(
     } else {
         return;
     };
+
+    // log::info!("render base");
 
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Base 3d Render Pass"),

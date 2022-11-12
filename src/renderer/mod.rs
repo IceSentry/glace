@@ -54,7 +54,7 @@ pub enum RenderLabel {
 pub struct WgpuRendererPlugin;
 impl Plugin for WgpuRendererPlugin {
     fn build(&self, app: &mut App) {
-        app
+        app.init_resource::<Msaa>()
             // Add the camera plugin here because it's required for the renderer to work
             .add_plugin(CameraPlugin)
             // This startup system needs to be run before any startup that needs the WgpuRenderer
@@ -88,6 +88,7 @@ impl Plugin for WgpuRendererPlugin {
             )
             .add_plugin(RenderPhase3dPlugin)
             .add_plugin(WireframePlugin)
+            .add_system_to_stage(RendererStage::StartRender, update_depth_texture)
             .add_system_to_stage(RendererStage::StartRender, start_render)
             .add_system_to_stage(RendererStage::EndRender, end_render)
             .add_system(bind_groups::mesh_view::update_light_buffer)
@@ -118,6 +119,16 @@ fn init_depth_texture(mut commands: Commands, renderer: Res<WgpuRenderer>, msaa:
     let depth_texture =
         Texture::create_depth_texture(&renderer.device, &renderer.config, msaa.samples);
     commands.insert_resource(DepthTexture(depth_texture));
+}
+
+fn update_depth_texture(
+    renderer: Res<WgpuRenderer>,
+    msaa: Res<Msaa>,
+    mut texture: ResMut<DepthTexture>,
+) {
+    if msaa.is_changed() {
+        texture.0 = Texture::create_depth_texture(&renderer.device, &renderer.config, msaa.samples);
+    }
 }
 
 #[derive(Resource)]
@@ -154,6 +165,8 @@ fn start_render(
     if windows.get_primary().is_none() {
         return;
     }
+
+    // log::info!("start render");
 
     let output = match renderer.surface.get_current_texture() {
         Ok(swap_chain_frame) => swap_chain_frame,

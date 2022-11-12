@@ -27,13 +27,13 @@ pub struct WireframePhase {
 pub struct WireframePlugin;
 impl Plugin for WireframePlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system_to_stage(RendererStage::Init, setup)
-            .add_system_to_stage(
-                RendererStage::Render,
-                render
-                    .label(RenderLabel::Wireframe)
-                    .after(RenderLabel::Base3d),
-            );
+        // app.add_startup_system_to_stage(RendererStage::Init, setup)
+        //     .add_system_to_stage(
+        //         RendererStage::Render,
+        //         render
+        //             .label(RenderLabel::Wireframe)
+        //             .after(RenderLabel::Base3d),
+        //     );
     }
 }
 

@@ -32,11 +32,10 @@ impl Plugin for EguiPlugin {
         app.add_startup_system(setup)
             .add_startup_system(setup_render_pass.exclusive_system())
             .add_system_to_stage(CoreStage::PreUpdate, begin_frame)
+            .add_system_to_stage(RendererStage::Render, update_render_pass.exclusive_system())
             .add_system_to_stage(
                 RendererStage::Render,
-                render
-                    .label(RenderLabel::Egui)
-                    .after(RenderLabel::Wireframe),
+                render.label(RenderLabel::Egui).after(RenderLabel::Base3d),
             )
             .add_system(handle_mouse_events)
             .add_system(on_exit);
@@ -89,6 +88,25 @@ fn setup_render_pass(world: &mut World) {
     world.insert_non_send_resource(EguiRenderPassRes(pass));
 }
 
+fn update_render_pass(
+    // mut rpass: NonSendMut<EguiRenderPassRes>,
+    // renderer: Res<WgpuRenderer>,
+    // msaa: Res<Msaa>,
+    world: &mut World,
+) {
+    if world.is_resource_changed::<Msaa>() {
+        let msaa = world.resource::<Msaa>();
+        let renderer = world.resource::<WgpuRenderer>();
+        log::info!("updating egui render pass");
+        let pass = egui_wgpu::renderer::RenderPass::new(
+            &renderer.device,
+            wgpu::TextureFormat::Bgra8UnormSrgb,
+            msaa.samples,
+        );
+        world.insert_non_send_resource(EguiRenderPassRes(pass));
+    }
+}
+
 fn begin_frame(
     ctx: Res<EguiCtxRes>,
     mut winit_state: ResMut<EguiWinitState>,
@@ -128,6 +146,8 @@ fn render(
     } else {
         return;
     };
+
+    // log::info!("render egui");
 
     let egui::FullOutput {
         shapes,

@@ -219,6 +219,7 @@ fn settings_ui(
     mut model_settings: ResMut<ModelSettings>,
     diagnostics: ResMut<Diagnostics>,
     mut spawned_entity: Local<Option<Entity>>,
+    mut msaa: ResMut<Msaa>,
 ) {
     egui::TopBottomPanel::top("my_panel").show(&ctx.0, |ui| {
         egui::menu::bar(ui, |ui| {
@@ -350,6 +351,18 @@ fn settings_ui(
         ui.label("scale");
         ui.add(egui::Slider::new(&mut model_settings.scale, 0.025..=5.0));
         ui.checkbox(&mut model_settings.wireframe, "wireframe");
+
+        ui.separator();
+
+        ui.label("Msaa");
+        ui.horizontal(|ui| {
+            if ui.button("1x").clicked() {
+                msaa.samples = 1;
+            }
+            if ui.button("4x").clicked() {
+                msaa.samples = 4;
+            }
+        });
     });
 
     egui::Area::new("Performance area")
