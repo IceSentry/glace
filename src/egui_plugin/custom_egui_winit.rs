@@ -271,6 +271,7 @@ impl EguiWinitState {
                     key,
                     pressed,
                     modifiers: self.egui_input.modifiers,
+                    repeat: false,
                 });
             }
         }

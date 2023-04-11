@@ -82,6 +82,7 @@ pub fn setup_mesh_view_bind_group(
     camera_uniform: Res<CameraUniform>,
     light: Query<&Light>,
 ) {
+    log::info!("setting up mesh view bind group");
     let device = &renderer.device;
 
     let mesh_view_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -142,6 +143,7 @@ pub fn setup_mesh_view_bind_group(
 
     commands.insert_resource(CameraBuffer(camera_buffer));
     commands.insert_resource(LightBuffer(light_buffer));
+    log::info!("inserting mesh view bind group layout");
     commands.insert_resource(MeshViewBindGroupLayout(mesh_view_layout));
     commands.insert_resource(MeshViewBindGroup(bind_group));
 }

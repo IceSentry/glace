@@ -1,6 +1,6 @@
 use bevy::{
     app::prelude::*,
-    ecs::prelude::*,
+    ecs::{prelude::*, schedule::ScheduleLabel},
     render::color::Color,
     utils::default,
     window::{prelude::*, WindowResized},
@@ -12,7 +12,7 @@ use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     camera::{Camera, CameraPlugin},
-    egui_plugin::EguiScreenDesciptorRes,
+    egui_plugin::{self, EguiScreenDesciptorRes},
     instances,
     texture::Texture,
 };
@@ -36,15 +36,15 @@ pub struct Msaa {
     pub samples: u32,
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, StageLabel)]
-pub enum RendererStage {
+#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
+pub enum RendererSet {
     StartRender,
     Render,
     EndRender,
     Init,
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemLabel)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub enum RenderLabel {
     Base3d,
     Wireframe,
@@ -57,40 +57,47 @@ impl Plugin for WgpuRendererPlugin {
         app.init_resource::<Msaa>()
             // Add the camera plugin here because it's required for the renderer to work
             .add_plugin(CameraPlugin)
+            .configure_set(RendererSet::Init.after(StartupSet::PostStartupFlush))
+            .configure_set(RendererSet::StartRender.before(CoreSet::PostUpdate))
+            .configure_set(RendererSet::StartRender.before(RendererSet::Render))
+            .configure_set(RendererSet::Render.before(RendererSet::EndRender))
+            // Render
+            .configure_set(RenderLabel::Base3d.in_set(RendererSet::Render))
+            .configure_set(RenderLabel::Egui.in_set(RendererSet::Render))
+            .configure_set(RenderLabel::Egui.after(RenderLabel::Base3d))
             // This startup system needs to be run before any startup that needs the WgpuRenderer
-            .add_startup_system_to_stage(StartupStage::PreStartup, init_renderer)
-            .add_startup_stage_after(
-                StartupStage::PostStartup,
-                RendererStage::Init,
-                SystemStage::parallel(),
-            )
+            .add_startup_system(init_renderer.in_base_set(StartupSet::PreStartup))
             .add_startup_system(init_depth_texture)
-            .add_startup_system_to_stage(
-                // Needs to be in PostStartup because it sets up the bind_group based on
-                // what was spawned in the startup
-                StartupStage::PostStartup,
-                bind_groups::mesh_view::setup_mesh_view_bind_group,
+            .add_startup_systems(
+                (
+                    bind_groups::mesh_view::setup_mesh_view_bind_group,
+                    apply_system_buffers,
+                    base_3d::setup,
+                )
+                    .chain()
+                    // Needs to be in PostStartup because it sets up the bind_group based on
+                    // what was spawned in the startup
+                    .in_base_set(StartupSet::PostStartup),
             )
-            .add_stage_after(
-                CoreStage::PostUpdate,
-                RendererStage::StartRender,
-                SystemStage::parallel(),
-            )
-            .add_stage_after(
-                RendererStage::StartRender,
-                RendererStage::Render,
-                SystemStage::parallel(),
-            )
-            .add_stage_after(
-                RendererStage::Render,
-                RendererStage::EndRender,
-                SystemStage::parallel(),
-            )
+            //
             .add_plugin(RenderPhase3dPlugin)
             .add_plugin(WireframePlugin)
-            .add_system_to_stage(RendererStage::StartRender, update_depth_texture)
-            .add_system_to_stage(RendererStage::StartRender, start_render)
-            .add_system_to_stage(RendererStage::EndRender, end_render)
+            .add_systems(
+                (
+                    update_depth_texture,
+                    apply_system_buffers,
+                    start_render,
+                    apply_system_buffers,
+                    base_3d::update_render_pass,
+                    base_3d::render,
+                    apply_system_buffers,
+                    egui_plugin::update_render_pass,
+                    egui_plugin::render,
+                    apply_system_buffers,
+                    end_render,
+                )
+                    .chain(),
+            )
             .add_system(bind_groups::mesh_view::update_light_buffer)
             .add_system(bind_groups::mesh_view::update_camera_buffer)
             .add_system(bind_groups::material::update_material_buffer)
@@ -103,12 +110,16 @@ impl Plugin for WgpuRendererPlugin {
 
 fn init_renderer(
     mut commands: Commands,
-    windows: Res<Windows>,
+    windows: Query<Entity, With<bevy::window::Window>>,
     winit_windows: NonSendMut<WinitWindows>,
 ) {
     let winit_window = windows
-        .get_primary()
-        .and_then(|window| winit_windows.get_window(window.id()))
+        .get_single()
+        .and_then(|window_id| {
+            winit_windows
+                .get_window(window_id)
+                .ok_or_else(|| panic!("Failed to get winit window"))
+        })
         .expect("Failed to get window");
 
     let renderer = future::block_on(WgpuRenderer::new(winit_window));
@@ -159,10 +170,10 @@ pub struct WgpuEncoder(pub Option<CommandEncoder>);
 fn start_render(
     mut commands: Commands,
     renderer: Res<WgpuRenderer>,
-    windows: Res<Windows>,
+    windows: Query<(), With<bevy::window::Window>>,
     msaa: Res<Msaa>,
 ) {
-    if windows.get_primary().is_none() {
+    if windows.get_single().is_err() {
         return;
     }
 
@@ -213,23 +224,26 @@ fn start_render(
 
 fn end_render(
     renderer: Res<WgpuRenderer>,
-    windows: Res<Windows>,
+    windows: Query<(), With<bevy::window::Window>>,
     mut encoder: ResMut<WgpuEncoder>,
     mut output: ResMut<WgpuSurfaceTexture>,
 ) {
-    if windows.get_primary().is_none() {
+    if windows.get_single().is_err() {
         return;
     }
+
     if let Some(encoder) = encoder.0.take() {
         renderer.queue.submit(std::iter::once(encoder.finish()));
         output.0.take().unwrap().present();
+    } else {
+        log::warn!("No encoder found");
     }
 }
 
 fn resize(
     mut renderer: ResMut<WgpuRenderer>,
     mut events: EventReader<WindowResized>,
-    windows: Res<Windows>,
+    windows: Query<&bevy::window::Window>,
     mut depth_texture: ResMut<DepthTexture>,
     mut camera_uniform: ResMut<CameraUniform>,
     mut camera: ResMut<Camera>,
@@ -237,7 +251,7 @@ fn resize(
     msaa: Res<Msaa>,
 ) {
     for event in events.iter() {
-        let window = windows.get(event.id).expect("window not found");
+        let window = windows.get(event.window).expect("window not found");
         let width = window.physical_width();
         let height = window.physical_height();
 
@@ -251,7 +265,7 @@ fn resize(
             Texture::create_depth_texture(&renderer.device, &renderer.config, msaa.samples);
 
         // Should probably be done in EguiPlugin
-        screen_descriptor.0.size_in_pixels = [width as u32, height as u32];
+        screen_descriptor.0.size_in_pixels = [width, height];
     }
 }
 
@@ -268,8 +282,11 @@ impl WgpuRenderer {
     pub async fn new(window: &Window) -> Self {
         let size = window.inner_size();
 
-        let instance = wgpu::Instance::new(wgpu::Backends::all());
-        let surface = unsafe { instance.create_surface(window) };
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::VULKAN,
+            ..default()
+        });
+        let surface = unsafe { instance.create_surface(window).unwrap() };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -291,12 +308,23 @@ impl WgpuRenderer {
             .await
             .expect("Failed to request device");
 
+        let surface_caps = surface.get_capabilities(&adapter);
+        let surface_format = surface_caps
+            .formats
+            .iter()
+            .copied()
+            .filter(|f| f.describe().srgb)
+            .next()
+            .unwrap_or(surface_caps.formats[0]);
+
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface.get_supported_formats(&adapter)[0],
+            format: surface_format,
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Immediate,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            view_formats: vec![],
         };
         surface.configure(&device, &config);
 
@@ -388,6 +416,7 @@ pub fn create_multisampled_framebuffer(
         format: config.format,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         label: None,
+        view_formats: &[],
     };
 
     device

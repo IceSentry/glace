@@ -10,7 +10,7 @@ use bevy::{
 };
 
 use self::custom_egui_winit::EguiWinitState;
-use crate::renderer::{Msaa, RenderLabel, RendererStage, WgpuEncoder, WgpuRenderer, WgpuView};
+use crate::renderer::{Msaa, RenderLabel, RendererSet, WgpuEncoder, WgpuRenderer, WgpuView};
 
 mod custom_egui_winit;
 
@@ -21,22 +21,15 @@ pub struct EguiCtxRes(pub egui::Context);
 pub struct EguiScreenDesciptorRes(pub egui_wgpu::renderer::ScreenDescriptor);
 
 #[derive(Resource)]
-struct EguiRenderPassRes(egui_wgpu::renderer::RenderPass);
-
-#[derive(Resource)]
-struct PaintJobs(Vec<egui::ClippedPrimitive>);
+pub struct PaintJobs(Vec<egui::ClippedPrimitive>);
 
 pub struct EguiPlugin;
 impl Plugin for EguiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup)
-            .add_startup_system(setup_render_pass.exclusive_system())
-            .add_system_to_stage(CoreStage::PreUpdate, begin_frame)
-            .add_system_to_stage(RendererStage::Render, update_render_pass.exclusive_system())
-            .add_system_to_stage(
-                RendererStage::Render,
-                render.label(RenderLabel::Egui).after(RenderLabel::Base3d),
-            )
+        app.add_startup_systems((setup, setup_render_pass))
+            .add_system(begin_frame.in_base_set(CoreSet::PreUpdate))
+            // .add_system(update_render_pass)
+            // .add_system(render)
             .add_system(handle_mouse_events)
             .add_system(on_exit);
     }
@@ -48,18 +41,19 @@ fn on_exit(
     egui_ctx: Res<EguiCtxRes>,
 ) {
     if !exit.is_empty() || !window_close.is_empty() {
-        let mem = egui_ctx.0.memory().clone();
-        std::fs::write(
-            "egui.ron",
-            ron::ser::to_string_pretty(&mem, ron::ser::PrettyConfig::new())
-                .expect("failed to serialize egui memory"),
-        )
-        .expect("Failed to write egui memory");
+        egui_ctx.0.memory(|mem| {
+            std::fs::write(
+                "egui.ron",
+                ron::ser::to_string_pretty(&mem, ron::ser::PrettyConfig::new())
+                    .expect("failed to serialize egui memory"),
+            )
+            .expect("Failed to write egui memory");
+        })
     }
 }
 
-fn setup(mut commands: Commands, windows: Res<Windows>) {
-    let window = windows.primary();
+fn setup(mut commands: Commands, windows: Query<&Window>) {
+    let window = windows.single();
     let screen_descriptor = egui_wgpu::renderer::ScreenDescriptor {
         size_in_pixels: [window.width() as u32, window.height() as u32],
         pixels_per_point: window.scale_factor() as f32,
@@ -70,25 +64,37 @@ fn setup(mut commands: Commands, windows: Res<Windows>) {
     let ctx = egui::Context::default();
     if let Ok(mem) = std::fs::read_to_string("egui.ron") {
         let mem: egui::Memory = ron::de::from_str(&mem).expect("Failed to deserialize egui.ron");
-        ctx.memory().clone_from(&mem);
+        ctx.memory_mut(|memory| {
+            memory.clone_from(&mem);
+        })
     }
 
+    log::info!("inserting egui ctx");
     commands.insert_resource(EguiCtxRes(ctx));
     commands.insert_resource(PaintJobs(vec![]));
 }
 
+#[derive(Resource)]
+pub struct EguiRenderer(egui_wgpu::renderer::Renderer);
+
 fn setup_render_pass(world: &mut World) {
     let msaa = world.resource::<Msaa>();
     let renderer = world.resource::<WgpuRenderer>();
-    let pass = egui_wgpu::renderer::RenderPass::new(
+    let egui_renderer = egui_wgpu::renderer::Renderer::new(
         &renderer.device,
         wgpu::TextureFormat::Bgra8UnormSrgb,
+        None,
         msaa.samples,
     );
-    world.insert_non_send_resource(EguiRenderPassRes(pass));
+    // let pass = egui_wgpu::renderer::RenderPass::new(
+    //     &renderer.device,
+    //     wgpu::TextureFormat::Bgra8UnormSrgb,
+    //     msaa.samples,
+    // );
+    world.insert_non_send_resource(EguiRenderer(egui_renderer));
 }
 
-fn update_render_pass(
+pub fn update_render_pass(
     // mut rpass: NonSendMut<EguiRenderPassRes>,
     // renderer: Res<WgpuRenderer>,
     // msaa: Res<Msaa>,
@@ -98,44 +104,50 @@ fn update_render_pass(
         let msaa = world.resource::<Msaa>();
         let renderer = world.resource::<WgpuRenderer>();
         log::info!("updating egui render pass");
-        let pass = egui_wgpu::renderer::RenderPass::new(
+        let egui_renderer = egui_wgpu::renderer::Renderer::new(
             &renderer.device,
             wgpu::TextureFormat::Bgra8UnormSrgb,
+            None,
             msaa.samples,
         );
-        world.insert_non_send_resource(EguiRenderPassRes(pass));
+        // let pass = egui_wgpu::renderer::RenderPass::new(
+        //     &renderer.device,
+        //     wgpu::TextureFormat::Bgra8UnormSrgb,
+        //     msaa.samples,
+        // );
+        world.insert_non_send_resource(EguiRenderer(egui_renderer));
     }
 }
 
 fn begin_frame(
     ctx: Res<EguiCtxRes>,
     mut winit_state: ResMut<EguiWinitState>,
-    windows: Res<Windows>,
+    windows: Query<Entity, With<Window>>,
     winit_windows: NonSendMut<WinitWindows>,
 ) {
-    if let Some(window) = windows.get_primary() {
+    if let Ok(window) = windows.get_single() {
         let winit_window = winit_windows
-            .get_window(window.id())
+            .get_window(window)
             .expect("winit window not found");
         ctx.0.begin_frame(winit_state.take_egui_input(winit_window));
     }
 }
 
-fn render(
+pub fn render(
     screen_descriptor: Res<EguiScreenDesciptorRes>,
-    mut render_pass: NonSendMut<EguiRenderPassRes>,
+    mut egui_renderer: NonSendMut<EguiRenderer>,
     mut encoder: ResMut<WgpuEncoder>,
     view: Res<WgpuView>,
     mut paint_jobs: ResMut<PaintJobs>,
     renderer: Res<WgpuRenderer>,
-    egui_ctx: NonSend<EguiCtxRes>,
+    egui_ctx: Res<EguiCtxRes>,
     mut state: ResMut<EguiWinitState>,
-    windows: Res<Windows>,
+    windows: Query<Entity, With<Window>>,
     winit_windows: NonSend<WinitWindows>,
 ) {
-    let window = if let Some(window) = windows.get_primary() {
+    let window = if let Ok(window) = windows.get_single() {
         winit_windows
-            .get_window(window.id())
+            .get_window(window)
             .expect("Failed to get primary window")
     } else {
         return;
@@ -161,14 +173,15 @@ fn render(
     state.handle_platform_output(window, &egui_ctx.0, platform_output);
 
     for (id, image_delta) in textures_delta.set {
-        render_pass
+        egui_renderer
             .0
             .update_texture(&renderer.device, &renderer.queue, id, &image_delta);
     }
 
-    render_pass.0.update_buffers(
+    egui_renderer.0.update_buffers(
         &renderer.device,
         &renderer.queue,
+        encoder,
         &paint_jobs.0,
         &screen_descriptor.0,
     );
@@ -183,9 +196,9 @@ fn render(
     });
     rpass.push_debug_group("egui_pass");
 
-    render_pass
+    egui_renderer
         .0
-        .execute_with_renderpass(&mut rpass, &paint_jobs.0, &screen_descriptor.0);
+        .render(&mut rpass, &paint_jobs.0, &screen_descriptor.0);
 
     rpass.pop_debug_group();
 }
@@ -197,9 +210,9 @@ fn handle_mouse_events(
     mut mouse_wheel_events: EventReader<MouseWheel>,
     mut platform: ResMut<EguiWinitState>,
     ctx: ResMut<EguiCtxRes>,
-    windows: Res<Windows>,
+    windows: Query<&Window>,
 ) {
-    let window_height = if let Some(window) = windows.get_primary() {
+    let window_height = if let Ok(window) = windows.get_single() {
         window.physical_height()
     } else {
         return;

@@ -13,7 +13,7 @@ use crate::{
 
 use super::{
     bind_groups::mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout},
-    DepthTexture, Msaa, RenderLabel, RendererStage, WgpuEncoder, WgpuRenderer, WgpuView,
+    DepthTexture, Msaa, WgpuEncoder, WgpuRenderer, WgpuView,
 };
 
 #[derive(Component)]

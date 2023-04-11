@@ -20,17 +20,17 @@ struct Material {
     flags: u32,
 }
 
-let MATERIAL_FLAGS_USE_NORMAL_MAP: u32 = 1u;
-let MATERIAL_FLAGS_1: u32 = 2u;
-let MATERIAL_FLAGS_2: u32 = 4u;
-let MATERIAL_FLAGS_3: u32 = 8u;
-let MATERIAL_FLAGS_4: u32 = 16u;
-let MATERIAL_FLAGS_5: u32 = 32u;
-let MATERIAL_FLAGS_6: u32 = 64u;
-let MATERIAL_FLAGS_7: u32 = 128u;
-let MATERIAL_FLAGS_8: u32 = 256u;
-let MATERIAL_FLAGS_9: u32 = 512u;
-let MATERIAL_FLAGS_0: u32 = 1024u;
+const MATERIAL_FLAGS_USE_NORMAL_MAP: u32 = 1u;
+const MATERIAL_FLAGS_1: u32 = 2u;
+const MATERIAL_FLAGS_2: u32 = 4u;
+const MATERIAL_FLAGS_3: u32 = 8u;
+const MATERIAL_FLAGS_4: u32 = 16u;
+const MATERIAL_FLAGS_5: u32 = 32u;
+const MATERIAL_FLAGS_6: u32 = 64u;
+const MATERIAL_FLAGS_7: u32 = 128u;
+const MATERIAL_FLAGS_8: u32 = 256u;
+const MATERIAL_FLAGS_9: u32 = 512u;
+const MATERIAL_FLAGS_0: u32 = 1024u;
 
 @group(1) @binding(0)
 var<uniform> material: Material;

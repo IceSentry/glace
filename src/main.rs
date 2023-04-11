@@ -2,6 +2,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use bevy::{
+    a11y::AccessibilityPlugin,
     app::{prelude::*, AppExit},
     asset::{prelude::*, AssetPlugin},
     diagnostic::{Diagnostic, Diagnostics, FrameTimeDiagnosticsPlugin},
@@ -74,11 +75,14 @@ fn main() {
         .init();
 
     App::new()
-        .insert_resource(WindowDescriptor {
-            // width: 800.0,
-            // height: 600.0,
-            // mode: WindowMode::Fullscreen,
-            title: "glace".into(),
+        .add_plugin(WindowPlugin {
+            primary_window: Some(Window {
+                // width: 800.0,
+                // height: 600.0,
+                // mode: WindowMode::Fullscreen,
+                title: "glace".into(),
+                ..default()
+            }),
             ..default()
         })
         .insert_resource(GlaceClearColor(Color::rgba(0.1, 0.1, 0.1, 1.0)))
@@ -96,11 +100,11 @@ fn main() {
         .insert_resource(Msaa { samples: 4 })
         .init_resource::<Diagnostics>()
         .add_plugins(MinimalPlugins)
-        .add_plugin(WindowPlugin::default())
+        .add_plugin(AccessibilityPlugin)
         .add_plugin(WinitPlugin)
-        .add_plugin(InputPlugin::default())
+        .add_plugin(InputPlugin)
         .add_plugin(WgpuRendererPlugin)
-        .add_plugin(AssetPlugin)
+        .add_plugin(AssetPlugin::default())
         .add_plugin(EguiPlugin)
         .add_plugin(ObjLoaderPlugin)
         .add_plugin(GltfLoaderPlugin)
@@ -129,7 +133,7 @@ fn spawn_grid(mut commands: Commands, renderer: Res<WgpuRenderer>) {
             ..model::Material::from_color(Color::GRAY)
         }],
     };
-    commands.spawn_bundle((
+    commands.spawn((
         plane,
         Transform {
             translation: Vec3::new(-(size / 2.), 0.0, -(size / 2.)),
@@ -152,7 +156,7 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
         color: Color::WHITE.as_rgba_f32().into(),
     };
 
-    commands.spawn().insert(light).insert(model);
+    commands.spawn((light, model));
 }
 
 fn exit_on_esc(key_input: Res<Input<KeyCode>>, mut exit_events: EventWriter<AppExit>) {
@@ -230,7 +234,7 @@ fn settings_ui(
                             commands.entity(spawned_entity).despawn_recursive();
                         }
                         let entity = commands
-                            .spawn_bundle(ObjBundle {
+                            .spawn(ObjBundle {
                                 obj: asset_server.load(&format!("models/obj/{model_name}")),
                             })
                             .insert(Transform::default())
@@ -272,7 +276,7 @@ fn settings_ui(
                             commands.entity(spawned_entity).despawn_recursive();
                         }
                         let entity = commands
-                            .spawn_bundle(GltfBundle {
+                            .spawn(GltfBundle {
                                 gltf: asset_server.load(&format!("models/gltf/{model_name}")),
                             })
                             .insert(Transform::default())
@@ -313,7 +317,7 @@ fn settings_ui(
         log::info!("Spawning default");
         model_settings.scale = 5.0;
         let entity = commands
-            .spawn_bundle(GltfBundle {
+            .spawn(GltfBundle {
                 gltf: asset_server.load("models/gltf/FlightHelmet/FlightHelmet.gltf"),
             })
             .insert(Transform::default())

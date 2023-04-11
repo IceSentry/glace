@@ -2,14 +2,15 @@ use bevy::app::prelude::*;
 use bevy::ecs::prelude::*;
 
 use super::{
-    bind_groups::{
-        material::{self, GpuModelMaterials},
-        mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout},
-    },
-    DepthTexture, GlaceClearColor, Msaa, RenderLabel, RendererStage, WgpuEncoder, WgpuRenderer,
+    bind_groups::material::{self, GpuModelMaterials},
+    DepthTexture, GlaceClearColor, Msaa, RenderLabel, RendererSet, WgpuEncoder, WgpuRenderer,
     WgpuView,
 };
 
+use crate::renderer::bind_groups::{
+    self,
+    mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout},
+};
 use crate::{
     instances::{InstanceBuffer, Instances},
     light::{draw_light_model, Light},
@@ -23,7 +24,7 @@ use crate::{
 pub struct Transparent;
 
 #[derive(Resource)]
-struct Base3dPass {
+pub struct Base3dPass {
     render_pipeline: wgpu::RenderPipeline,
     light_render_pipeline: wgpu::RenderPipeline,
     transparent_render_pipeline: wgpu::RenderPipeline,
@@ -109,17 +110,20 @@ impl Base3dPass {
         }
     }
 }
-
 pub struct RenderPhase3dPlugin;
 impl Plugin for RenderPhase3dPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system_to_stage(RendererStage::Init, setup)
-            .add_system_to_stage(RendererStage::Render, update_render_pass.before(render))
-            .add_system_to_stage(RendererStage::Render, render.label(RenderLabel::Base3d));
+        // app
+        //     // .add_startup_system(setup.in_set(RendererSet::Init))
+        //     .add_systems(
+        //         (update_render_pass, render)
+        //             .chain()
+        //             .in_set(RenderLabel::Base3d),
+        //     );
     }
 }
 
-fn setup(
+pub fn setup(
     mut commands: Commands,
     renderer: Res<WgpuRenderer>,
     mesh_view_layout: Res<MeshViewBindGroupLayout>,
@@ -128,7 +132,7 @@ fn setup(
     commands.insert_resource(Base3dPass::new(&renderer, &mesh_view_layout, msaa.samples));
 }
 
-fn update_render_pass(
+pub fn update_render_pass(
     mut render_pass: ResMut<Base3dPass>,
     msaa: Res<Msaa>,
     mesh_view_layout: Res<MeshViewBindGroupLayout>,
@@ -140,7 +144,7 @@ fn update_render_pass(
     }
 }
 
-fn render(
+pub fn render(
     mesh_view_bind_group: Res<MeshViewBindGroup>,
     depth_texture: Res<DepthTexture>,
     mut encoder: ResMut<WgpuEncoder>,

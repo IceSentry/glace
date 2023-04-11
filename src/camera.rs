@@ -21,7 +21,7 @@ pub struct CameraSettings {
 pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system_to_stage(StartupStage::PreStartup, setup_camera)
+        app.add_startup_system(setup_camera.in_base_set(StartupSet::PreStartup))
             .add_system(fly_camera);
     }
 }
@@ -105,8 +105,9 @@ impl Camera {
     }
 }
 
-fn setup_camera(mut commands: Commands, windows: Res<Windows>) {
-    let camera = Camera::new(windows.primary().width(), windows.primary().height());
+fn setup_camera(mut commands: Commands, windows: Query<&Window>) {
+    let window = windows.single();
+    let camera = Camera::new(window.width(), window.height());
 
     let mut camera_uniform = CameraUniform::new();
     camera_uniform.update_view_proj(&camera);
@@ -117,7 +118,7 @@ fn setup_camera(mut commands: Commands, windows: Res<Windows>) {
 
 fn fly_camera(
     time: Res<Time>,
-    windows: Res<Windows>,
+    windows: Query<&Window>,
     mouse_input: Res<Input<MouseButton>>,
     key_input: Res<Input<KeyCode>>,
     mut camera: ResMut<Camera>,
@@ -139,7 +140,7 @@ fn fly_camera(
     }
 
     if mouse_delta != Vec2::ZERO {
-        let window = if let Some(window) = windows.get_primary() {
+        let window = if let Ok(window) = windows.get_single() {
             Vec2::new(window.width() as f32, window.height() as f32)
         } else {
             Vec2::ZERO

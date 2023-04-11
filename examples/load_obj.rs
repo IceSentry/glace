@@ -168,7 +168,7 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
         color: Color::WHITE.as_rgba_f32().into(),
     };
 
-    commands.spawn().insert(light).insert(model);
+    commands.spawn((light, model));
 }
 
 fn update_light(mut query: Query<&mut Light>, time: Res<Time>) {
