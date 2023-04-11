@@ -1,16 +1,11 @@
-use bevy::app::prelude::*;
 use bevy::ecs::prelude::*;
 
 use super::{
     bind_groups::material::{self, GpuModelMaterials},
-    DepthTexture, GlaceClearColor, Msaa, RenderLabel, RendererSet, WgpuEncoder, WgpuRenderer,
-    WgpuView,
+    DepthTexture, GlaceClearColor, Msaa, WgpuEncoder, WgpuRenderer, WgpuView,
 };
 
-use crate::renderer::bind_groups::{
-    self,
-    mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout},
-};
+use crate::renderer::bind_groups::mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout};
 use crate::{
     instances::{InstanceBuffer, Instances},
     light::{draw_light_model, Light},
@@ -108,18 +103,6 @@ impl Base3dPass {
             light_render_pipeline,
             transparent_render_pipeline,
         }
-    }
-}
-pub struct RenderPhase3dPlugin;
-impl Plugin for RenderPhase3dPlugin {
-    fn build(&self, app: &mut App) {
-        // app
-        //     // .add_startup_system(setup.in_set(RendererSet::Init))
-        //     .add_systems(
-        //         (update_render_pass, render)
-        //             .chain()
-        //             .in_set(RenderLabel::Base3d),
-        //     );
     }
 }
 

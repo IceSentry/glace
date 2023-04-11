@@ -1,9 +1,5 @@
 use bevy::{
-    app::prelude::*,
-    ecs::{prelude::*, schedule::ScheduleLabel},
-    render::color::Color,
-    utils::default,
-    window::{prelude::*, WindowResized},
+    app::prelude::*, ecs::prelude::*, render::color::Color, utils::default, window::WindowResized,
     winit::WinitWindows,
 };
 use futures_lite::future;
@@ -17,9 +13,7 @@ use crate::{
     texture::Texture,
 };
 
-use self::{
-    base_3d::RenderPhase3dPlugin, bind_groups::mesh_view::CameraUniform, wireframe::WireframePlugin,
-};
+use self::{bind_groups::mesh_view::CameraUniform, wireframe::WireframePlugin};
 
 pub mod base_3d;
 pub mod bind_groups;
@@ -31,24 +25,14 @@ pub struct DepthTexture(pub Texture);
 #[derive(Default, Resource)]
 pub struct GlaceClearColor(pub Color);
 
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct Msaa {
     pub samples: u32,
 }
-
-#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
-pub enum RendererSet {
-    StartRender,
-    Render,
-    EndRender,
-    Init,
-}
-
-#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
-pub enum RenderLabel {
-    Base3d,
-    Wireframe,
-    Egui,
+impl Default for Msaa {
+    fn default() -> Self {
+        Self { samples: 1 }
+    }
 }
 
 pub struct WgpuRendererPlugin;
@@ -57,14 +41,6 @@ impl Plugin for WgpuRendererPlugin {
         app.init_resource::<Msaa>()
             // Add the camera plugin here because it's required for the renderer to work
             .add_plugin(CameraPlugin)
-            .configure_set(RendererSet::Init.after(StartupSet::PostStartupFlush))
-            .configure_set(RendererSet::StartRender.before(CoreSet::PostUpdate))
-            .configure_set(RendererSet::StartRender.before(RendererSet::Render))
-            .configure_set(RendererSet::Render.before(RendererSet::EndRender))
-            // Render
-            .configure_set(RenderLabel::Base3d.in_set(RendererSet::Render))
-            .configure_set(RenderLabel::Egui.in_set(RendererSet::Render))
-            .configure_set(RenderLabel::Egui.after(RenderLabel::Base3d))
             // This startup system needs to be run before any startup that needs the WgpuRenderer
             .add_startup_system(init_renderer.in_base_set(StartupSet::PreStartup))
             .add_startup_system(init_depth_texture)
@@ -80,7 +56,6 @@ impl Plugin for WgpuRendererPlugin {
                     .in_base_set(StartupSet::PostStartup),
             )
             //
-            .add_plugin(RenderPhase3dPlugin)
             .add_plugin(WireframePlugin)
             .add_systems(
                 (
@@ -313,8 +288,7 @@ impl WgpuRenderer {
             .formats
             .iter()
             .copied()
-            .filter(|f| f.describe().srgb)
-            .next()
+            .find(|f| f.describe().srgb)
             .unwrap_or(surface_caps.formats[0]);
 
         let config = wgpu::SurfaceConfiguration {

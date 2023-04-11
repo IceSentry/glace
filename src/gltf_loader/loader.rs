@@ -42,10 +42,7 @@ pub async fn load_gltf<'a, 'b>(
     Ok(LoadedGltf { materials, meshes })
 }
 
-fn load_textures<'a>(
-    gltf: &gltf::Gltf,
-    load_context: &LoadContext<'a>,
-) -> HashMap<usize, RgbaImage> {
+fn load_textures(gltf: &gltf::Gltf, load_context: &LoadContext) -> HashMap<usize, RgbaImage> {
     IoTaskPool::get()
         .scope(|scope| {
             gltf.textures().for_each(|gltf_texture| {

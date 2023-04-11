@@ -26,7 +26,7 @@ pub struct WireframePhase {
 
 pub struct WireframePlugin;
 impl Plugin for WireframePlugin {
-    fn build(&self, app: &mut App) {
+    fn build(&self, _app: &mut App) {
         // app.add_startup_system_to_stage(RendererStage::Init, setup)
         //     .add_system_to_stage(
         //         RendererStage::Render,
@@ -37,7 +37,7 @@ impl Plugin for WireframePlugin {
     }
 }
 
-fn setup(
+fn _setup(
     mut commands: Commands,
     renderer: Res<WgpuRenderer>,
     mesh_view_layout: Res<MeshViewBindGroupLayout>,
@@ -105,7 +105,7 @@ fn setup(
     });
 }
 
-fn render(
+fn _render(
     phase: Res<WireframePhase>,
     mesh_view_bind_group: Res<MeshViewBindGroup>,
     depth_texture: Res<DepthTexture>,

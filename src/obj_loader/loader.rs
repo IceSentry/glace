@@ -83,7 +83,7 @@ async fn load_texture<'a>(
 ) -> anyhow::Result<Option<RgbaImage>> {
     Ok(if !texture_path.is_empty() {
         let bytes = load_context
-            .read_asset_bytes(load_context.path().parent().unwrap().join(&texture_path))
+            .read_asset_bytes(load_context.path().parent().unwrap().join(texture_path))
             .await?;
         log::info!("Finished loading texture: {texture_path:?}");
         let rgba = image::load_from_memory(&bytes)?.to_rgba8();

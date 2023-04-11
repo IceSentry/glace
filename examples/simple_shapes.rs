@@ -1,4 +1,7 @@
-use bevy::{input::InputPlugin, prelude::*, window::WindowPlugin, winit::WinitPlugin};
+use bevy::{
+    a11y::AccessibilityPlugin, input::InputPlugin, prelude::*, window::WindowPlugin,
+    winit::WinitPlugin,
+};
 
 use glace::{
     camera::CameraSettings,
@@ -23,6 +26,7 @@ fn main() {
         .insert_resource(CameraSettings { speed: 10.0 })
         .add_plugins(MinimalPlugins)
         .add_plugin(WindowPlugin::default())
+        .add_plugin(AccessibilityPlugin)
         .add_plugin(WinitPlugin)
         .add_plugin(InputPlugin::default())
         .add_plugin(WgpuRendererPlugin)
@@ -45,7 +49,7 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
         color: Color::WHITE.as_rgba_f32().into(),
     };
 
-    commands.spawn().insert(light).insert(model);
+    commands.spawn((light, model));
 }
 
 fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
@@ -72,7 +76,7 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
             ..Default::default()
         }],
     };
-    commands.spawn_bundle((
+    commands.spawn((
         plane,
         Transform {
             translation: Vec3::new(-2.5, -1.0, -2.5),
@@ -84,7 +88,7 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
         meshes: vec![shapes::cube::Cube::new(1.0, 1.0, 1.0).mesh(&renderer.device)],
         materials: vec![model::Material::from_color(Color::WHITE)],
     };
-    commands.spawn_bundle((
+    commands.spawn((
         cube,
         Transform {
             translation: Vec3::ZERO - (Vec3::X * 1.5),
@@ -96,7 +100,7 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
         meshes: vec![shapes::sphere::UVSphere::default().mesh(&renderer.device)],
         materials: vec![model::Material::from_color(Color::WHITE)],
     };
-    commands.spawn_bundle((
+    commands.spawn((
         sphere,
         Transform {
             translation: Vec3::ZERO,
@@ -109,7 +113,7 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
         materials: vec![model::Material::from_color(Color::WHITE)],
     };
     commands
-        .spawn_bundle((
+        .spawn((
             capsule,
             Transform {
                 translation: Vec3::ZERO + (Vec3::X * 1.5),

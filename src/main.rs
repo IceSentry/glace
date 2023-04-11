@@ -235,7 +235,7 @@ fn settings_ui(
                         }
                         let entity = commands
                             .spawn(ObjBundle {
-                                obj: asset_server.load(&format!("models/obj/{model_name}")),
+                                obj: asset_server.load(format!("models/obj/{model_name}")),
                             })
                             .insert(Transform::default())
                             .insert(SpawnedModel)
@@ -277,7 +277,7 @@ fn settings_ui(
                         }
                         let entity = commands
                             .spawn(GltfBundle {
-                                gltf: asset_server.load(&format!("models/gltf/{model_name}")),
+                                gltf: asset_server.load(format!("models/gltf/{model_name}")),
                             })
                             .insert(Transform::default())
                             .insert(SpawnedModel)

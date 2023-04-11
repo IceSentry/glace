@@ -10,7 +10,7 @@ use bevy::{
 };
 
 use self::custom_egui_winit::EguiWinitState;
-use crate::renderer::{Msaa, RenderLabel, RendererSet, WgpuEncoder, WgpuRenderer, WgpuView};
+use crate::renderer::{Msaa, WgpuEncoder, WgpuRenderer, WgpuView};
 
 mod custom_egui_winit;
 
@@ -59,7 +59,7 @@ fn setup(mut commands: Commands, windows: Query<&Window>) {
         pixels_per_point: window.scale_factor() as f32,
     };
     commands.insert_resource(EguiScreenDesciptorRes(screen_descriptor));
-    commands.insert_resource(EguiWinitState::new());
+    commands.init_resource::<EguiWinitState>();
 
     let ctx = egui::Context::default();
     if let Ok(mem) = std::fs::read_to_string("egui.ron") {

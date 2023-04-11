@@ -141,7 +141,7 @@ fn fly_camera(
 
     if mouse_delta != Vec2::ZERO {
         let window = if let Ok(window) = windows.get_single() {
-            Vec2::new(window.width() as f32, window.height() as f32)
+            Vec2::new(window.width(), window.height())
         } else {
             Vec2::ZERO
         };

@@ -1,5 +1,6 @@
 use bevy::{
-    asset::AssetPlugin, input::InputPlugin, prelude::*, window::WindowPlugin, winit::WinitPlugin,
+    a11y::AccessibilityPlugin, asset::AssetPlugin, input::InputPlugin, prelude::*,
+    window::WindowPlugin, winit::WinitPlugin,
 };
 
 use glace::{
@@ -56,9 +57,10 @@ fn main() {
         })
         .add_plugins(MinimalPlugins)
         .add_plugin(WindowPlugin::default())
+        .add_plugin(AccessibilityPlugin)
         .add_plugin(WinitPlugin)
         .add_plugin(InputPlugin::default())
-        .add_plugin(AssetPlugin)
+        .add_plugin(AssetPlugin::default())
         .add_plugin(WgpuRendererPlugin)
         .add_plugin(EguiPlugin)
         .add_plugin(ObjLoaderPlugin)
@@ -77,7 +79,7 @@ fn spawn_obj(mut commands: Commands, asset_server: Res<AssetServer>) {
             let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
             let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
 
-            let translation = Vec3::new(x as f32, 0.0, z as f32);
+            let translation = Vec3::new(x, 0.0, z);
             let rotation = if translation == Vec3::ZERO {
                 Quat::from_axis_angle(Vec3::Y, 0.0)
             } else {
@@ -93,14 +95,14 @@ fn spawn_obj(mut commands: Commands, asset_server: Res<AssetServer>) {
     }
 
     commands
-        .spawn_bundle(ObjBundle {
+        .spawn(ObjBundle {
             obj: asset_server.load(INSTANCED_MODEL_NAME),
         })
         .insert(Instances(instances))
         .insert(Wave::default());
 
     commands
-        .spawn_bundle(ObjBundle {
+        .spawn(ObjBundle {
             obj: asset_server.load(MODEL_NAME),
         })
         .insert(Transform {

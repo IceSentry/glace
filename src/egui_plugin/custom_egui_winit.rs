@@ -14,8 +14,8 @@ pub struct EguiWinitState {
     pixels_per_point: f32,
 }
 
-impl EguiWinitState {
-    pub fn new() -> Self {
+impl Default for EguiWinitState {
+    fn default() -> Self {
         Self {
             start_time: Instant::now(),
             egui_input: egui::RawInput {
@@ -27,7 +27,9 @@ impl EguiWinitState {
             pixels_per_point: 1.0,
         }
     }
+}
 
+impl EguiWinitState {
     /// Prepare for a new frame by extracting the accumulated input,
     /// as well as setting [the time](egui::RawInput::time) and [screen rectangle](egui::RawInput::screen_rect).
     pub fn take_egui_input(&mut self, window: &winit::window::Window) -> egui::RawInput {

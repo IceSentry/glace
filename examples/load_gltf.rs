@@ -1,5 +1,6 @@
 use bevy::{
-    asset::AssetPlugin, input::InputPlugin, prelude::*, window::WindowPlugin, winit::WinitPlugin,
+    a11y::AccessibilityPlugin, asset::AssetPlugin, input::InputPlugin, prelude::*,
+    window::WindowPlugin, winit::WinitPlugin,
 };
 
 use glace::{
@@ -26,9 +27,10 @@ fn main() {
         .insert_resource(CameraSettings { speed: 10.0 })
         .add_plugins(MinimalPlugins)
         .add_plugin(WindowPlugin::default())
+        .add_plugin(AccessibilityPlugin)
         .add_plugin(WinitPlugin)
         .add_plugin(InputPlugin::default())
-        .add_plugin(AssetPlugin)
+        .add_plugin(AssetPlugin::default())
         .add_plugin(WgpuRendererPlugin)
         .add_plugin(EguiPlugin)
         .add_plugin(GltfLoaderPlugin)
@@ -40,7 +42,7 @@ fn main() {
 
 fn spawn_gltf(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
-        .spawn_bundle(GltfBundle {
+        .spawn(GltfBundle {
             gltf: asset_server.load("models/gltf/FlightHelmet/FlightHelmet.gltf"),
         })
         .insert(Transform {
@@ -62,7 +64,7 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
         color: Color::WHITE.as_rgba_f32().into(),
     };
 
-    commands.spawn().insert(light).insert(model);
+    commands.spawn((light, model));
 }
 
 fn update_light(mut query: Query<&mut Light>, time: Res<Time>) {
