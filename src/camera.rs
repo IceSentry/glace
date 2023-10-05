@@ -21,8 +21,8 @@ pub struct CameraSettings {
 pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup_camera.in_base_set(StartupSet::PreStartup))
-            .add_system(fly_camera);
+        app.add_systems(PreStartup, setup_camera)
+            .add_systems(Update, fly_camera);
     }
 }
 
@@ -171,7 +171,7 @@ fn fly_camera(
     if key_input.pressed(KeyCode::Space) {
         axis_input.y += 1.0;
     }
-    if key_input.pressed(KeyCode::LShift) {
+    if key_input.pressed(KeyCode::ShiftLeft) {
         axis_input.y -= 1.0;
     }
 

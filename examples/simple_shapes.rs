@@ -24,15 +24,16 @@ fn main() {
     App::new()
         .insert_resource(GlaceClearColor(Color::rgba(0.1, 0.1, 0.1, 1.0)))
         .insert_resource(CameraSettings { speed: 10.0 })
-        .add_plugins(MinimalPlugins)
-        .add_plugin(WindowPlugin::default())
-        .add_plugin(AccessibilityPlugin)
-        .add_plugin(WinitPlugin)
-        .add_plugin(InputPlugin::default())
-        .add_plugin(WgpuRendererPlugin)
-        .add_plugin(EguiPlugin)
-        .add_startup_system(spawn_light)
-        .add_startup_system(spawn_shapes)
+        .add_plugins((
+            MinimalPlugins,
+            WindowPlugin::default(),
+            AccessibilityPlugin,
+            WinitPlugin,
+            InputPlugin,
+            WgpuRendererPlugin,
+            EguiPlugin,
+        ))
+        .add_systems(Startup, (spawn_light, spawn_shapes))
         .run();
 }
 

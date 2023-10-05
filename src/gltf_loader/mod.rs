@@ -6,7 +6,7 @@ use crate::{
 use bevy::{
     asset::{AssetLoader, LoadContext, LoadedAsset},
     prelude::*,
-    reflect::TypeUuid,
+    reflect::{TypePath, TypeUuid},
     utils::Instant,
 };
 
@@ -17,14 +17,14 @@ impl Plugin for GltfLoaderPlugin {
     fn build(&self, app: &mut App) {
         app.add_asset::<LoadedGltf>()
             .init_asset_loader::<GltfLoader>()
-            .add_system(gltf_spawner);
+            .add_systems(Update, gltf_spawner);
         // TODO improve loaded detection
         // .add_system(handle_loaded)
         // .add_system(handle_instanced_loaded);
     }
 }
 
-#[derive(Debug, TypeUuid)]
+#[derive(Debug, TypeUuid, TypePath)]
 #[uuid = "d87cb7a6-21b0-4c5a-933e-9edfe42e653b"]
 pub struct LoadedGltf {
     materials: Vec<Material>,

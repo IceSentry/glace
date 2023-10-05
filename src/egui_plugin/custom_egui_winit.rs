@@ -19,7 +19,7 @@ impl Default for EguiWinitState {
         Self {
             start_time: Instant::now(),
             egui_input: egui::RawInput {
-                has_focus: false,
+                focused: false,
                 ..Default::default()
             },
             pointer_pos_in_points: None,
@@ -116,8 +116,8 @@ impl EguiWinitState {
                 egui_ctx.wants_keyboard_input()
                     || input.virtual_keycode == Some(winit::event::VirtualKeyCode::Tab)
             }
-            WindowEvent::Focused(has_focus) => {
-                self.egui_input.has_focus = *has_focus;
+            WindowEvent::Focused(focused) => {
+                self.egui_input.focused = *focused;
                 // We will not be given a KeyboardInput event when the modifiers are released while
                 // the window does not have focus. Unset all modifier state to be safe.
                 self.egui_input.modifiers = egui::Modifiers::default();

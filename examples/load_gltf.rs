@@ -25,18 +25,19 @@ fn main() {
     App::new()
         .insert_resource(GlaceClearColor(Color::rgba(0.1, 0.1, 0.1, 1.0)))
         .insert_resource(CameraSettings { speed: 10.0 })
-        .add_plugins(MinimalPlugins)
-        .add_plugin(WindowPlugin::default())
-        .add_plugin(AccessibilityPlugin)
-        .add_plugin(WinitPlugin)
-        .add_plugin(InputPlugin::default())
-        .add_plugin(AssetPlugin::default())
-        .add_plugin(WgpuRendererPlugin)
-        .add_plugin(EguiPlugin)
-        .add_plugin(GltfLoaderPlugin)
-        .add_startup_system(spawn_gltf)
-        .add_startup_system(spawn_light)
-        .add_system(update_light)
+        .add_plugins((
+            MinimalPlugins,
+            WindowPlugin::default(),
+            AccessibilityPlugin,
+            WinitPlugin,
+            InputPlugin,
+            AssetPlugin::default(),
+            WgpuRendererPlugin,
+            EguiPlugin,
+            GltfLoaderPlugin,
+        ))
+        .add_systems(Startup, (spawn_gltf, spawn_light))
+        .add_systems(Update, update_light)
         .run();
 }
 

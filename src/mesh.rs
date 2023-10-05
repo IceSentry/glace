@@ -158,7 +158,7 @@ impl Mesh {
             // Average the tangents/bitangents
             for (i, n) in triangles_included.into_iter().enumerate() {
                 let denom = 1.0 / n as f32;
-                let mut v = &mut self.vertices[i];
+                let v = &mut self.vertices[i];
                 v.tangent = (v.tangent * denom).normalize();
                 v.bitangent = (v.bitangent * denom).normalize();
             }

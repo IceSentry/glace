@@ -9,7 +9,7 @@ pub struct Quad;
 impl Quad {
     #[allow(unused)]
     pub fn mesh(&self, device: &wgpu::Device) -> ModelMesh {
-        let mut vertices = vec![
+        let mut vertices = [
             ([0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0]), // 0
             ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 0.0]), // 1
             ([1.0, 1.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0]), // 2
@@ -42,11 +42,12 @@ pub struct FullscreenQuad;
 impl FullscreenQuad {
     #[allow(unused)]
     pub fn mesh(&self, device: &wgpu::Device) -> ModelMesh {
-        let mut vertices = vec![
+        #[rustfmt::skip]
+        let mut vertices = [
             ([-1.0, -1.0, 0.0], [0.0, 0.0, 0.0], [0.0, 1.0]), // 0
-            ([1.0, -1.0, 0.0], [0.0, 0.0, 0.0], [1.0, 1.0]),  // 1
-            ([1.0, 1.0, 0.0], [0.0, 0.0, 0.0], [1.0, 0.0]),   // 2
-            ([-1.0, 1.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0]),  // 3
+            ([ 1.0, -1.0, 0.0], [0.0, 0.0, 0.0], [1.0, 1.0]), // 1
+            ([ 1.0,  1.0, 0.0], [0.0, 0.0, 0.0], [1.0, 0.0]), // 2
+            ([-1.0,  1.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0]), // 3
         ];
 
         let indices = vec![

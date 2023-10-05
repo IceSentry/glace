@@ -5,7 +5,7 @@ use bevy::{
     a11y::AccessibilityPlugin,
     app::{prelude::*, AppExit},
     asset::{prelude::*, AssetPlugin},
-    diagnostic::{Diagnostic, Diagnostics, FrameTimeDiagnosticsPlugin},
+    diagnostic::{Diagnostic, DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     ecs::prelude::*,
     hierarchy::prelude::*,
     input::prelude::*,
@@ -75,7 +75,7 @@ fn main() {
         .init();
 
     App::new()
-        .add_plugin(WindowPlugin {
+        .add_plugins(WindowPlugin {
             primary_window: Some(Window {
                 // width: 800.0,
                 // height: 600.0,
@@ -98,24 +98,29 @@ fn main() {
             wireframe: false,
         })
         .insert_resource(Msaa { samples: 4 })
-        .init_resource::<Diagnostics>()
-        .add_plugins(MinimalPlugins)
-        .add_plugin(AccessibilityPlugin)
-        .add_plugin(WinitPlugin)
-        .add_plugin(InputPlugin)
-        .add_plugin(WgpuRendererPlugin)
-        .add_plugin(AssetPlugin::default())
-        .add_plugin(EguiPlugin)
-        .add_plugin(ObjLoaderPlugin)
-        .add_plugin(GltfLoaderPlugin)
-        .add_plugin(FrameTimeDiagnosticsPlugin::default())
-        .add_startup_system(spawn_light)
-        .add_startup_system(spawn_grid)
-        .add_system(update_light)
-        .add_system(exit_on_esc)
-        .add_system(settings_ui)
-        .add_system(update_materials)
-        .add_system(update_model)
+        .add_plugins((
+            MinimalPlugins,
+            AccessibilityPlugin,
+            WinitPlugin,
+            InputPlugin,
+            WgpuRendererPlugin,
+            AssetPlugin::default(),
+            EguiPlugin,
+            ObjLoaderPlugin,
+            GltfLoaderPlugin,
+            FrameTimeDiagnosticsPlugin,
+        ))
+        .add_systems(Startup, (spawn_light, spawn_grid))
+        .add_systems(
+            Update,
+            (
+                update_light,
+                exit_on_esc,
+                settings_ui,
+                update_materials,
+                update_model,
+            ),
+        )
         .run();
 }
 
@@ -189,7 +194,7 @@ fn update_materials(
     }
 
     for mut model in query.iter_mut() {
-        for mut material in model.materials.iter_mut() {
+        for material in model.materials.iter_mut() {
             material.gloss = settings.gloss;
         }
     }
@@ -221,7 +226,7 @@ fn settings_ui(
     mut light_settings: ResMut<LightSettings>,
     mut global_material_settings: ResMut<GlobalMaterialSettings>,
     mut model_settings: ResMut<ModelSettings>,
-    diagnostics: ResMut<Diagnostics>,
+    diagnostics: ResMut<DiagnosticsStore>,
     mut spawned_entity: Local<Option<Entity>>,
     mut msaa: ResMut<Msaa>,
 ) {

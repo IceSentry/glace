@@ -26,12 +26,11 @@ pub struct PaintJobs(Vec<egui::ClippedPrimitive>);
 pub struct EguiPlugin;
 impl Plugin for EguiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_systems((setup, setup_render_pass))
-            .add_system(begin_frame.in_base_set(CoreSet::PreUpdate))
+        app.add_systems(Startup, (setup, setup_render_pass))
+            .add_systems(PreUpdate, begin_frame)
             // .add_system(update_render_pass)
             // .add_system(render)
-            .add_system(handle_mouse_events)
-            .add_system(on_exit);
+            .add_systems(Update, (handle_mouse_events, on_exit));
     }
 }
 
@@ -229,7 +228,7 @@ fn handle_mouse_events(
                     y: if ev.position.y as u32 > window_height {
                         0.0
                     } else {
-                        (window_height - ev.position.y as u32) as f64
+                        (ev.position.y as u32) as f64
                     },
                 },
             },

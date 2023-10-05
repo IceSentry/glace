@@ -55,20 +55,19 @@ fn main() {
         .insert_resource(InstanceSettings {
             move_instances: false,
         })
-        .add_plugins(MinimalPlugins)
-        .add_plugin(WindowPlugin::default())
-        .add_plugin(AccessibilityPlugin)
-        .add_plugin(WinitPlugin)
-        .add_plugin(InputPlugin::default())
-        .add_plugin(AssetPlugin::default())
-        .add_plugin(WgpuRendererPlugin)
-        .add_plugin(EguiPlugin)
-        .add_plugin(ObjLoaderPlugin)
-        .add_startup_system(spawn_obj)
-        .add_startup_system(spawn_light)
-        .add_system(update_light)
-        .add_system(settings_ui)
-        .add_system(move_instances)
+        .add_plugins((
+            MinimalPlugins,
+            WindowPlugin::default(),
+            AccessibilityPlugin,
+            WinitPlugin,
+            InputPlugin,
+            AssetPlugin::default(),
+            WgpuRendererPlugin,
+            EguiPlugin,
+            ObjLoaderPlugin,
+        ))
+        .add_systems(Startup, (spawn_obj, spawn_light))
+        .add_systems(Update, (update_light, settings_ui, move_instances))
         .run();
 }
 

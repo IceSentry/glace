@@ -7,7 +7,7 @@ use crate::{
 use bevy::{
     asset::{AssetLoader, LoadedAsset},
     prelude::*,
-    reflect::TypeUuid,
+    reflect::{TypePath, TypeUuid},
     utils::Instant,
 };
 
@@ -23,11 +23,11 @@ impl Plugin for ObjLoaderPlugin {
     fn build(&self, app: &mut App) {
         app.add_asset::<LoadedObj>()
             .init_asset_loader::<ObjLoader>()
-            .add_system(obj_spawner);
+            .add_systems(Update, obj_spawner);
     }
 }
 
-#[derive(Debug, TypeUuid)]
+#[derive(Debug, TypeUuid, TypePath)]
 #[uuid = "39cadc56-aa9c-4543-8640-a018b74b5052"]
 pub struct LoadedObj {
     pub materials: Vec<Material>,
