@@ -1,405 +1,146 @@
-#![allow(clippy::type_complexity)]
-#![allow(clippy::too_many_arguments)]
-
 use bevy::{
     a11y::AccessibilityPlugin,
-    app::{prelude::*, AppExit},
-    asset::{prelude::*, AssetPlugin},
-    diagnostic::{Diagnostic, DiagnosticsStore, FrameTimeDiagnosticsPlugin},
-    ecs::prelude::*,
-    hierarchy::prelude::*,
-    input::prelude::*,
     input::InputPlugin,
-    math::prelude::*,
-    render::color::Color,
-    time::prelude::*,
-    transform::prelude::*,
-    utils::prelude::*,
-    window::{prelude::*, WindowPlugin},
-    winit::WinitPlugin,
-    MinimalPlugins,
+    prelude::*,
+    window::{PrimaryWindow, RawHandleWrapper, WindowResized},
+    winit::{WinitPlugin, WinitWindows},
 };
-
-use crate::{
-    camera::CameraSettings,
-    egui_plugin::{EguiCtxRes, EguiPlugin},
-    gltf_loader::{GltfBundle, GltfLoaderPlugin},
-    light::Light,
-    model::Model,
-    obj_loader::{ObjBundle, ObjLoaderPlugin},
-    renderer::{wireframe::Wireframe, GlaceClearColor, Msaa, WgpuRenderer, WgpuRendererPlugin},
-};
-
-mod camera;
-mod egui_plugin;
-mod gltf_loader;
-mod image_utils;
-mod instances;
-mod light;
-mod mesh;
-mod model;
-mod obj_loader;
-mod renderer;
-mod shapes;
-mod texture;
-mod transform;
-
-const LIGHT_POSITION: Vec3 = Vec3::from_array([4.0, 4.0, 0.0]);
-
-#[derive(Resource)]
-struct LightSettings {
-    rotate: bool,
-    color: [f32; 3],
-    speed: f32,
-}
-
-#[derive(Resource)]
-struct GlobalMaterialSettings {
-    gloss: f32,
-}
-
-#[derive(Resource)]
-struct ModelSettings {
-    scale: f32,
-    wireframe: bool,
-}
-
-#[derive(Component)]
-struct SpawnedModel;
+use wgpu::{Backends, Features, Limits};
+use winit::dpi::PhysicalSize;
 
 fn main() {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .filter_module("wgpu_hal", log::LevelFilter::Error)
-        .filter_module("wgpu_core", log::LevelFilter::Error)
-        .init();
-
     App::new()
-        .add_plugins(WindowPlugin {
-            primary_window: Some(Window {
-                // width: 800.0,
-                // height: 600.0,
-                // mode: WindowMode::Fullscreen,
-                title: "glace".into(),
-                ..default()
-            }),
-            ..default()
-        })
-        .insert_resource(GlaceClearColor(Color::rgba(0.1, 0.1, 0.1, 1.0)))
-        .insert_resource(CameraSettings { speed: 10.0 })
-        .insert_resource(LightSettings {
-            rotate: true,
-            color: [1.0, 1.0, 1.0],
-            speed: 0.35,
-        })
-        .insert_resource(GlobalMaterialSettings { gloss: 0.5 })
-        .insert_resource(ModelSettings {
-            scale: 1.0,
-            wireframe: false,
-        })
-        .insert_resource(Msaa { samples: 4 })
         .add_plugins((
             MinimalPlugins,
+            WindowPlugin {
+                primary_window: Some(Window {
+                    title: "glace2".into(),
+                    ..default()
+                }),
+                ..default()
+            },
             AccessibilityPlugin,
-            WinitPlugin,
+            WinitPlugin::default(),
             InputPlugin,
-            WgpuRendererPlugin,
-            AssetPlugin::default(),
-            EguiPlugin,
-            ObjLoaderPlugin,
-            GltfLoaderPlugin,
-            FrameTimeDiagnosticsPlugin,
         ))
-        .add_systems(Startup, (spawn_light, spawn_grid))
-        .add_systems(
-            Update,
-            (
-                update_light,
-                exit_on_esc,
-                settings_ui,
-                update_materials,
-                update_model,
-            ),
-        )
+        .add_systems(Startup, setup_renderer)
+        .add_systems(Update, (resize, render))
         .run();
 }
 
-fn spawn_grid(mut commands: Commands, renderer: Res<WgpuRenderer>) {
-    let size = 10.0;
-    let plane = Model {
-        meshes: vec![shapes::plane::Plane {
-            resolution: size as usize,
-            size,
-        }
-        .mesh(&renderer.device)],
-        materials: vec![model::Material {
-            gloss: 1.0,
-            specular: Vec3::ZERO,
-            ..model::Material::from_color(Color::GRAY)
-        }],
-    };
-    commands.spawn((
-        plane,
-        Transform {
-            translation: Vec3::new(-(size / 2.), 0.0, -(size / 2.)),
-            ..default()
+#[derive(Resource, Deref, DerefMut)]
+struct Device(wgpu::Device);
+#[derive(Resource, Deref, DerefMut)]
+struct Queue(wgpu::Queue);
+#[derive(Resource, Deref, DerefMut)]
+struct SurfaceConfiguration(wgpu::SurfaceConfiguration);
+#[derive(Resource, Deref, DerefMut)]
+struct Surface(wgpu::Surface<'static>);
+
+fn setup_renderer(
+    mut commands: Commands,
+    primary_window: Query<(Entity, &RawHandleWrapper), With<PrimaryWindow>>,
+    winit_windows: NonSendMut<WinitWindows>,
+) {
+    let (window_entity, raw_handle_wrapper) = primary_window.single();
+    let winit_window = winit_windows
+        .get_window(window_entity)
+        .expect("Failed to get winit window");
+    let size = winit_window.inner_size();
+
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        backends: Backends::all(),
+        ..default()
+    });
+    let surface = instance
+        .create_surface(unsafe { raw_handle_wrapper.get_handle() })
+        .expect("Failed to create surface");
+
+    let adapter =
+        futures_lite::future::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::default(),
+            compatible_surface: Some(&surface),
+            force_fallback_adapter: false,
+        }))
+        .expect("Failed to request adapter");
+
+    let (device, queue) = futures_lite::future::block_on(adapter.request_device(
+        &wgpu::DeviceDescriptor {
+            required_features: Features::empty(),
+            required_limits: Limits::default(),
+            label: None,
         },
-        Wireframe,
-    ));
+        None,
+    ))
+    .expect("Failed to request device");
+
+    let config = surface
+        .get_default_config(&adapter, size.width, size.height)
+        .expect("Failed to get default surface config");
+    surface.configure(&device, &config);
+
+    commands.insert_resource(Device(device));
+    commands.insert_resource(Queue(queue));
+    commands.insert_resource(SurfaceConfiguration(config));
+    commands.insert_resource(Surface(surface));
 }
 
-fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
-    let cube = shapes::cube::Cube::new(1.0, 1.0, 1.0);
-    let mesh = cube.mesh(&renderer.device);
-    let model = Model {
-        meshes: vec![mesh],
-        materials: vec![],
-    };
-
-    let light = Light {
-        position: LIGHT_POSITION,
-        color: Color::WHITE.as_rgba_f32().into(),
-    };
-
-    commands.spawn((light, model));
-}
-
-fn exit_on_esc(key_input: Res<Input<KeyCode>>, mut exit_events: EventWriter<AppExit>) {
-    if key_input.just_pressed(KeyCode::Escape) {
-        exit_events.send_default();
-    }
-}
-
-fn update_light(mut query: Query<&mut Light>, time: Res<Time>, settings: Res<LightSettings>) {
-    if !settings.rotate {
-        return;
-    }
-    for mut light in query.iter_mut() {
-        let old_position = light.position;
-        light.position = Quat::from_axis_angle(
-            Vec3::Y,
-            std::f32::consts::TAU * time.delta_seconds() * settings.speed,
-        )
-        .mul_vec3(old_position);
-        light.color = settings.color.into();
-    }
-}
-
-fn update_materials(
-    mut query: Query<&mut Model, With<SpawnedModel>>,
-    settings: Res<GlobalMaterialSettings>,
+fn resize(
+    mut surface_config: ResMut<SurfaceConfiguration>,
+    surface: Res<Surface>,
+    device: Res<Device>,
+    mut events: EventReader<WindowResized>,
+    windows: Query<&Window>,
 ) {
-    if !settings.is_changed() {
-        return;
-    }
+    for event in events.read() {
+        let window = windows.get(event.window).expect("window not found");
+        let width = window.physical_width();
+        let height = window.physical_height();
 
-    for mut model in query.iter_mut() {
-        for material in model.materials.iter_mut() {
-            material.gloss = settings.gloss;
+        let new_size = PhysicalSize { width, height };
+
+        if new_size.width > 0 && new_size.height > 0 {
+            surface_config.width = new_size.width;
+            surface_config.height = new_size.height;
+
+            surface.configure(&device, &surface_config);
         }
     }
 }
 
-fn update_model(
-    mut commands: Commands,
-    mut query: Query<(Entity, &mut Transform), (With<Model>, With<SpawnedModel>)>,
-    settings: Res<ModelSettings>,
-) {
-    if !settings.is_changed() {
-        return;
-    }
-    for (entity, mut transform) in &mut query {
-        transform.scale = Vec3::ONE * settings.scale;
-        if settings.wireframe {
-            commands.entity(entity).insert(Wireframe);
-        } else {
-            commands.entity(entity).remove::<Wireframe>();
-        }
-    }
-}
-
-fn settings_ui(
-    mut commands: Commands,
-    ctx: Res<EguiCtxRes>,
-    asset_server: Res<AssetServer>,
-    mut camera_settings: ResMut<CameraSettings>,
-    mut light_settings: ResMut<LightSettings>,
-    mut global_material_settings: ResMut<GlobalMaterialSettings>,
-    mut model_settings: ResMut<ModelSettings>,
-    diagnostics: ResMut<DiagnosticsStore>,
-    mut spawned_entity: Local<Option<Entity>>,
-    mut msaa: ResMut<Msaa>,
-) {
-    egui::TopBottomPanel::top("my_panel").show(&ctx.0, |ui| {
-        egui::menu::bar(ui, |ui| {
-            ui.menu_button("Spawn", |ui| {
-                ui.menu_button("obj", |ui| {
-                    let mut spawn_obj = |model_name: &str| {
-                        if let Some(spawned_entity) = *spawned_entity {
-                            commands.entity(spawned_entity).despawn_recursive();
-                        }
-                        let entity = commands
-                            .spawn(ObjBundle {
-                                obj: asset_server.load(format!("models/obj/{model_name}")),
-                            })
-                            .insert(Transform::default())
-                            .insert(SpawnedModel)
-                            .id();
-                        *spawned_entity = Some(entity);
-                    };
-                    if ui.button("sponza").clicked() {
-                        model_settings.scale = 0.025;
-                        spawn_obj("large_obj/sponza/sponza.obj");
-                    }
-                    if ui.button("bistro").clicked() {
-                        model_settings.scale = 0.05;
-                        spawn_obj("large_obj/bistro/Exterior/exterior.obj");
-                    }
-                    if ui.button("cube").clicked() {
-                        model_settings.scale = 1.0;
-                        spawn_obj("cube/cube.obj");
-                    }
-                    if ui.button("cube2").clicked() {
-                        model_settings.scale = 1.0;
-                        spawn_obj("learn_opengl/container2/cube.obj");
-                    }
-                    if ui.button("teapot").clicked() {
-                        model_settings.scale = 0.025;
-                        spawn_obj("teapot/teapot.obj");
-                    }
-                    if ui.button("bunny").clicked() {
-                        model_settings.scale = 1.5;
-                        spawn_obj("bunny.obj");
-                    }
-                });
-
-                ui.separator();
-
-                ui.menu_button("gltf", |ui| {
-                    let mut spawn_gltf = |model_name: &str| {
-                        if let Some(spawned_entity) = *spawned_entity {
-                            commands.entity(spawned_entity).despawn_recursive();
-                        }
-                        let entity = commands
-                            .spawn(GltfBundle {
-                                gltf: asset_server.load(format!("models/gltf/{model_name}")),
-                            })
-                            .insert(Transform::default())
-                            .insert(SpawnedModel)
-                            .id();
-                        *spawned_entity = Some(entity);
-                    };
-                    if ui.button("sponza").clicked() {
-                        model_settings.scale = 0.025;
-                        spawn_gltf("sponza/Sponza.gltf");
-                    }
-                    if ui.button("new sponza").clicked() {
-                        model_settings.scale = 1.0;
-                        spawn_gltf("/new-sponza/NewSponza_Main_Blender_glTF.gltf");
-                    }
-                    if ui.button("bistro exterior").clicked() {
-                        model_settings.scale = 0.025;
-                        spawn_gltf("bistro/exterior/bistro_exterior.gltf");
-                    }
-                    if ui.button("flight helmet").clicked() {
-                        model_settings.scale = 5.0;
-                        spawn_gltf("FlightHelmet/FlightHelmet.gltf");
-                    }
-                    if ui.button("suzanne").clicked() {
-                        model_settings.scale = 1.0;
-                        spawn_gltf("suzanne/Suzanne.gltf");
-                    }
-                    if ui.button("cube").clicked() {
-                        model_settings.scale = 1.0;
-                        spawn_gltf("learnopengl_cube/cube.gltf");
-                    }
-                });
-            });
-        });
+fn render(surface: Res<Surface>, device: Res<Device>, queue: Res<Queue>) {
+    let output = surface
+        .get_current_texture()
+        .expect("Failed to get texture");
+    let view = output
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
+    let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("Render Encoder"),
     });
 
-    if spawned_entity.is_none() {
-        log::info!("Spawning default");
-        model_settings.scale = 5.0;
-        let entity = commands
-            .spawn(GltfBundle {
-                gltf: asset_server.load("models/gltf/FlightHelmet/FlightHelmet.gltf"),
-            })
-            .insert(Transform::default())
-            .insert(SpawnedModel)
-            .id();
-        *spawned_entity = Some(entity);
+    {
+        let _render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.1,
+                        g: 0.2,
+                        b: 0.3,
+                        a: 1.0,
+                    }),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
     }
 
-    egui::SidePanel::left("Settings").show(&ctx.0, |ui| {
-        ui.heading("Camera");
-        ui.label("Speed");
-        ui.add(egui::Slider::new(&mut camera_settings.speed, 1.0..=20.0).step_by(0.5));
-
-        ui.separator();
-
-        ui.heading("Light");
-        ui.checkbox(&mut light_settings.rotate, "Rotate");
-        ui.label("Speed");
-        ui.add(egui::Slider::new(&mut light_settings.speed, 0.0..=2.0).step_by(0.05));
-        ui.label("Color");
-        ui.color_edit_button_rgb(&mut light_settings.color);
-
-        ui.separator();
-
-        ui.heading("Global Material");
-        ui.label("Gloss");
-        ui.add(egui::Slider::new(
-            &mut global_material_settings.gloss,
-            0.0..=1.0,
-        ));
-
-        ui.separator();
-
-        ui.heading("Model");
-        ui.label("scale");
-        ui.add(egui::Slider::new(&mut model_settings.scale, 0.025..=5.0));
-        ui.checkbox(&mut model_settings.wireframe, "wireframe");
-
-        ui.separator();
-
-        ui.label("Msaa");
-        ui.horizontal(|ui| {
-            if ui.button("1x").clicked() {
-                msaa.samples = 1;
-            }
-            if ui.button("4x").clicked() {
-                msaa.samples = 4;
-            }
-        });
-    });
-
-    egui::Area::new("Performance area")
-        .interactable(false)
-        .anchor(egui::Align2::LEFT_TOP, [0., 0.])
-        .show(&ctx.0, |ui| {
-            egui::Frame::none()
-                .fill(egui::Color32::from_rgba_premultiplied(
-                    0,
-                    0,
-                    0,
-                    (0.75 * 256.0) as u8,
-                ))
-                .show(ui, |ui| {
-                    let fps = diagnostics
-                        .get(FrameTimeDiagnosticsPlugin::FPS)
-                        .and_then(Diagnostic::average);
-                    let frame_time = diagnostics
-                        .get(FrameTimeDiagnosticsPlugin::FRAME_TIME)
-                        .and_then(Diagnostic::average);
-                    let (fps, frame_time) = match (fps, frame_time) {
-                        (Some(fps), Some(frame_time)) => (fps, frame_time),
-                        _ => return,
-                    };
-
-                    ui.visuals_mut().override_text_color = Some(egui::Color32::WHITE);
-                    ui.label(format!("fps: {:.2}", fps));
-                    ui.label(format!("dt: {:.2}ms", frame_time));
-                });
-        });
+    queue.submit(std::iter::once(command_encoder.finish()));
+    output.present();
 }
