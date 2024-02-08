@@ -2,7 +2,7 @@ use bevy::{
     a11y::AccessibilityPlugin,
     input::InputPlugin,
     prelude::*,
-    window::{PrimaryWindow, RawHandleWrapper, WindowResized},
+    window::{PresentMode, PrimaryWindow, RawHandleWrapper, WindowResized},
     winit::{WinitPlugin, WinitWindows},
 };
 use wgpu::{Backends, Features, Limits};
@@ -15,6 +15,7 @@ fn main() {
             WindowPlugin {
                 primary_window: Some(Window {
                     title: "glace2".into(),
+                    present_mode: PresentMode::AutoNoVsync,
                     ..default()
                 }),
                 ..default()
@@ -39,10 +40,10 @@ struct Surface(wgpu::Surface<'static>);
 
 fn setup_renderer(
     mut commands: Commands,
-    primary_window: Query<(Entity, &RawHandleWrapper), With<PrimaryWindow>>,
+    primary_window: Query<(Entity, &Window, &RawHandleWrapper), With<PrimaryWindow>>,
     winit_windows: NonSendMut<WinitWindows>,
 ) {
-    let (window_entity, raw_handle_wrapper) = primary_window.single();
+    let (window_entity, window, raw_handle_wrapper) = primary_window.single();
     let winit_window = winit_windows
         .get_window(window_entity)
         .expect("Failed to get winit window");
@@ -74,9 +75,17 @@ fn setup_renderer(
     ))
     .expect("Failed to request device");
 
-    let config = surface
+    let mut config = surface
         .get_default_config(&adapter, size.width, size.height)
         .expect("Failed to get default surface config");
+    config.present_mode = match window.present_mode {
+        PresentMode::AutoVsync => wgpu::PresentMode::AutoVsync,
+        PresentMode::AutoNoVsync => wgpu::PresentMode::AutoNoVsync,
+        PresentMode::Fifo => wgpu::PresentMode::Fifo,
+        PresentMode::FifoRelaxed => wgpu::PresentMode::FifoRelaxed,
+        PresentMode::Immediate => wgpu::PresentMode::Immediate,
+        PresentMode::Mailbox => wgpu::PresentMode::Mailbox,
+    };
     surface.configure(&device, &config);
 
     commands.insert_resource(Device(device));
