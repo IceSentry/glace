@@ -3,9 +3,9 @@ use bevy::{
     input::InputPlugin,
     prelude::*,
     window::{PresentMode, PrimaryWindow, RawHandleWrapper, WindowResized},
-    winit::{WinitPlugin, WinitWindows},
+    winit::{WakeUp, WinitPlugin, WinitWindows},
 };
-use wgpu::{Backends, Features, Limits};
+use wgpu::{Backends, Features, Limits, MemoryHints};
 use winit::dpi::PhysicalSize;
 
 fn main() {
@@ -21,7 +21,7 @@ fn main() {
                 ..default()
             },
             AccessibilityPlugin,
-            WinitPlugin::default(),
+            WinitPlugin::<WakeUp>::default(),
             InputPlugin,
         ))
         .add_systems(Startup, setup_renderer)
@@ -67,9 +67,10 @@ fn setup_renderer(
 
     let (device, queue) = futures_lite::future::block_on(adapter.request_device(
         &wgpu::DeviceDescriptor {
-            required_features: Features::empty(),
+            required_features: Features::default(),
             required_limits: Limits::default(),
-            label: None,
+            label: Some("RenderDevice"),
+            memory_hints: MemoryHints::Performance,
         },
         None,
     ))
@@ -87,6 +88,8 @@ fn setup_renderer(
         PresentMode::Mailbox => wgpu::PresentMode::Mailbox,
     };
     surface.configure(&device, &config);
+
+    println!("Renderer setup done!");
 
     commands.insert_resource(Device(device));
     commands.insert_resource(Queue(queue));
@@ -118,6 +121,7 @@ fn resize(
 }
 
 fn render(surface: Res<Surface>, device: Res<Device>, queue: Res<Queue>) {
+    println!("render");
     let output = surface
         .get_current_texture()
         .expect("Failed to get texture");
@@ -152,4 +156,5 @@ fn render(surface: Res<Surface>, device: Res<Device>, queue: Res<Queue>) {
 
     queue.submit(std::iter::once(command_encoder.finish()));
     output.present();
+    println!("present done.");
 }

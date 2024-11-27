@@ -10,13 +10,13 @@ opt-level = 1
 opt-level = 3
 
 [dependencies]
-wgpu = "0.19.1"
-winit = "0.29.10"
-bevy = { git = "https://github.com/bevyengine/bevy", rev = "0166db33f7047a8a15be60ce4cd2384440168c8d", default-features = false, features = [
+wgpu = "23.0.1"
+winit = "0.30.5"
+bevy = { version = "0.15.0-rc.3", default-features = false, features = [
     "bevy_asset",
     "bevy_winit",
     "bevy_render",
-    "multi-threaded",
+    "multi_threaded",
 ] }
-anyhow = "1.0.79"
-futures-lite = "2.2.0"
+anyhow = "1.0.93"
+futures-lite = "2.5.0"
