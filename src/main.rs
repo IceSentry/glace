@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use bevy::{
     a11y::AccessibilityPlugin,
+    diagnostic::{Diagnostic, Diagnostics, DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     input::InputPlugin,
     prelude::*,
     window::{PresentMode, PrimaryWindow, RawHandleWrapper, WindowResized},
@@ -17,18 +18,19 @@ fn main() {
             WindowPlugin {
                 primary_window: Some(Window {
                     title: "glace2".into(),
-                    present_mode: PresentMode::AutoNoVsync,
+                    present_mode: PresentMode::AutoVsync,
                     ..default()
                 }),
                 ..default()
             },
             AccessibilityPlugin,
             WinitPlugin::<WakeUp>::default(),
+            FrameTimeDiagnosticsPlugin,
             InputPlugin,
         ))
         .add_systems(Startup, setup_renderer)
         .add_systems(Update, (resize, render).chain())
-        .add_systems(Update, quit_on_q)
+        .add_systems(Update, (quit_on_q, update_window_title))
         .run();
 }
 
@@ -145,6 +147,20 @@ fn setup_renderer(
 fn quit_on_q(input: Res<ButtonInput<KeyCode>>, mut exit_event: EventWriter<AppExit>) {
     if input.just_pressed(KeyCode::KeyQ) {
         exit_event.send_default();
+    }
+}
+
+fn update_window_title(
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+    diagnostics: Res<DiagnosticsStore>,
+) {
+    for mut window in &mut windows {
+        if let Some(fps) = diagnostics
+            .get(&FrameTimeDiagnosticsPlugin::FPS)
+            .and_then(|fps| fps.smoothed())
+        {
+            window.title = format!("FPS: {:.2}", fps);
+        }
     }
 }
 
