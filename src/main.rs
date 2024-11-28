@@ -2,13 +2,18 @@ use std::borrow::Cow;
 
 use bevy::{
     a11y::AccessibilityPlugin,
+    core::FrameCount,
     diagnostic::{Diagnostic, Diagnostics, DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     input::InputPlugin,
     prelude::*,
+    utils::HashMap,
     window::{PresentMode, PrimaryWindow, RawHandleWrapper, WindowResized},
     winit::{WakeUp, WinitPlugin, WinitWindows},
 };
-use wgpu::{Backends, Features, Limits, MemoryHints};
+use wgpu::{
+    Backends, CommandEncoderDescriptor, Extent3d, Features, Limits, MemoryHints, Texture,
+    TextureDescriptor, TextureFormat, TextureUsages, TextureViewDescriptor,
+};
 use winit::dpi::PhysicalSize;
 
 fn main() {
@@ -102,6 +107,7 @@ fn setup_renderer(
     let swapchain_capabilities = surface.get_capabilities(&adapter);
     let swapchain_format = swapchain_capabilities.formats[0];
 
+    // TODO prepare shader/pipeline in separate system
     // Load the shaders from disk
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: None,
@@ -114,7 +120,7 @@ fn setup_renderer(
         push_constant_ranges: &[],
     });
     let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: None,
+        label: Some("Triangle Pipeline"),
         layout: Some(&pipeline_layout),
         vertex: wgpu::VertexState {
             module: &shader,
@@ -126,7 +132,7 @@ fn setup_renderer(
             module: &shader,
             entry_point: Some("fs_main"),
             compilation_options: Default::default(),
-            targets: &[Some(swapchain_format.into())],
+            targets: &[Some(TextureFormat::Rgba16Float.into())],
         }),
         primitive: wgpu::PrimitiveState::default(),
         depth_stencil: None,
@@ -155,11 +161,15 @@ fn update_window_title(
     diagnostics: Res<DiagnosticsStore>,
 ) {
     for mut window in &mut windows {
-        if let Some(fps) = diagnostics
-            .get(&FrameTimeDiagnosticsPlugin::FPS)
-            .and_then(|fps| fps.smoothed())
-        {
-            window.title = format!("FPS: {:.2}", fps);
+        if let (Some(fps), Some(dt)) = (
+            diagnostics
+                .get(&FrameTimeDiagnosticsPlugin::FPS)
+                .and_then(|fps| fps.smoothed()),
+            diagnostics
+                .get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)
+                .and_then(|dt| dt.smoothed()),
+        ) {
+            window.title = format!("FPS: {:.0}, dt: {:.2}ms", fps, dt);
         }
     }
 }
@@ -193,28 +203,52 @@ fn render(
     device: Res<Device>,
     queue: Res<Queue>,
     render_pipeline: Res<TrianglePipeline>,
+    frame_count: Res<FrameCount>,
+    mut main_texture_cache: Local<Option<(wgpu::Texture, wgpu::TextureView)>>,
 ) {
     let frame = surface
         .get_current_texture()
         .expect("Failed to get texture");
-    let view = frame
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
-    let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("Render Encoder"),
-    });
+    let view = frame.texture.create_view(&TextureViewDescriptor::default());
+    if main_texture_cache.is_none() {
+        let main_texture_format = wgpu::TextureFormat::Rgba16Float;
+        // TODO cache this texture
+        let main_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Main Texture"),
+            size: frame.texture.size(),
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: main_texture_format,
+            usage: TextureUsages::COPY_SRC
+                | TextureUsages::COPY_DST
+                | TextureUsages::STORAGE_BINDING
+                | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[main_texture_format],
+        });
+        let main_texture_view = main_texture.create_view(&TextureViewDescriptor::default());
+        *main_texture_cache = Some((main_texture, main_texture_view));
+    }
+    let Some((main_texture, main_texture_view)) = main_texture_cache.as_ref() else {
+        panic!("Failed to get main texture");
+    };
+
+    let mut command_encoder =
+        device.create_command_encoder(&CommandEncoderDescriptor { label: None });
+
+    let flash = (frame_count.0 as f32 / 120.0).sin().abs();
 
     {
         let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
+                view: &main_texture_view,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.1,
-                        g: 0.2,
-                        b: 0.3,
+                        r: 0.0,
+                        g: 0.0,
+                        b: flash as f64,
                         a: 1.0,
                     }),
                     store: wgpu::StoreOp::Store,
@@ -227,6 +261,22 @@ fn render(
         rpass.set_pipeline(&render_pipeline);
         rpass.draw(0..3, 0..1);
     }
+
+    command_encoder.copy_texture_to_texture(
+        wgpu::ImageCopyTexture {
+            texture: main_texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::ImageCopyTexture {
+            texture: &frame.texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        frame.texture.size(),
+    );
 
     queue.submit(Some(command_encoder.finish()));
     frame.present();
