@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use bevy::{
     a11y::AccessibilityPlugin,
     input::InputPlugin,
@@ -37,6 +39,8 @@ struct Queue(wgpu::Queue);
 struct SurfaceConfiguration(wgpu::SurfaceConfiguration);
 #[derive(Resource, Deref, DerefMut)]
 struct Surface(wgpu::Surface<'static>);
+#[derive(Resource, Deref, DerefMut)]
+struct RenderPipeline(wgpu::RenderPipeline);
 
 fn setup_renderer(
     mut commands: Commands,
@@ -47,12 +51,11 @@ fn setup_renderer(
     let winit_window = winit_windows
         .get_window(window_entity)
         .expect("Failed to get winit window");
-    let size = winit_window.inner_size();
+    let mut size = winit_window.inner_size();
+    size.width = size.width.max(1);
+    size.height = size.height.max(1);
 
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: Backends::all(),
-        ..default()
-    });
+    let instance = wgpu::Instance::default();
     let surface = instance
         .create_surface(unsafe { raw_handle_wrapper.get_handle() })
         .expect("Failed to create surface");
@@ -67,10 +70,10 @@ fn setup_renderer(
 
     let (device, queue) = futures_lite::future::block_on(adapter.request_device(
         &wgpu::DeviceDescriptor {
-            required_features: Features::default(),
-            required_limits: Limits::default(),
+            required_features: Features::empty(),
+            required_limits: Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()),
             label: Some("RenderDevice"),
-            memory_hints: MemoryHints::Performance,
+            memory_hints: MemoryHints::MemoryUsage,
         },
         None,
     ))
@@ -89,12 +92,49 @@ fn setup_renderer(
     };
     surface.configure(&device, &config);
 
+    let swapchain_capabilities = surface.get_capabilities(&adapter);
+    let swapchain_format = swapchain_capabilities.formats[0];
+
+    // Load the shaders from disk
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
+    });
+
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[],
+        push_constant_ranges: &[],
+    });
+    let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: None,
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            compilation_options: Default::default(),
+            targets: &[Some(swapchain_format.into())],
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview: None,
+        cache: None,
+    });
+
     println!("Renderer setup done!");
 
     commands.insert_resource(Device(device));
     commands.insert_resource(Queue(queue));
     commands.insert_resource(SurfaceConfiguration(config));
     commands.insert_resource(Surface(surface));
+    commands.insert_resource(RenderPipeline(render_pipeline));
 }
 
 fn resize(
@@ -120,12 +160,17 @@ fn resize(
     }
 }
 
-fn render(surface: Res<Surface>, device: Res<Device>, queue: Res<Queue>) {
+fn render(
+    surface: Res<Surface>,
+    device: Res<Device>,
+    queue: Res<Queue>,
+    render_pipeline: Res<RenderPipeline>,
+) {
     println!("render");
-    let output = surface
+    let frame = surface
         .get_current_texture()
         .expect("Failed to get texture");
-    let view = output
+    let view = frame
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
     let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -133,7 +178,7 @@ fn render(surface: Res<Surface>, device: Res<Device>, queue: Res<Queue>) {
     });
 
     {
-        let _render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &view,
@@ -152,9 +197,11 @@ fn render(surface: Res<Surface>, device: Res<Device>, queue: Res<Queue>) {
             occlusion_query_set: None,
             timestamp_writes: None,
         });
+        rpass.set_pipeline(&render_pipeline);
+        rpass.draw(0..3, 0..1);
     }
 
-    queue.submit(std::iter::once(command_encoder.finish()));
-    output.present();
+    queue.submit(Some(command_encoder.finish()));
+    frame.present();
     println!("present done.");
 }
