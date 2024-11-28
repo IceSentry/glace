@@ -3,16 +3,16 @@ use std::borrow::Cow;
 use bevy::{
     a11y::AccessibilityPlugin,
     core::FrameCount,
-    diagnostic::{Diagnostic, Diagnostics, DiagnosticsStore, FrameTimeDiagnosticsPlugin},
+    diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     input::InputPlugin,
     prelude::*,
-    utils::HashMap,
+    render::render_resource::BindGroupEntries,
     window::{PresentMode, PrimaryWindow, RawHandleWrapper, WindowResized},
     winit::{WakeUp, WinitPlugin, WinitWindows},
 };
 use wgpu::{
-    Backends, CommandEncoderDescriptor, Extent3d, Features, Limits, MemoryHints, Texture,
-    TextureDescriptor, TextureFormat, TextureUsages, TextureViewDescriptor,
+    BindingResource, CommandEncoderDescriptor, Features, Limits, MemoryHints, StoreOp,
+    TextureFormat, TextureUsages, TextureViewDescriptor,
 };
 use winit::dpi::PhysicalSize;
 
@@ -39,6 +39,30 @@ fn main() {
         .run();
 }
 
+fn quit_on_q(input: Res<ButtonInput<KeyCode>>, mut exit_event: EventWriter<AppExit>) {
+    if input.just_pressed(KeyCode::KeyQ) {
+        exit_event.send_default();
+    }
+}
+
+fn update_window_title(
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+    diagnostics: Res<DiagnosticsStore>,
+) {
+    for mut window in &mut windows {
+        if let (Some(fps), Some(dt)) = (
+            diagnostics
+                .get(&FrameTimeDiagnosticsPlugin::FPS)
+                .and_then(|fps| fps.smoothed()),
+            diagnostics
+                .get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)
+                .and_then(|dt| dt.smoothed()),
+        ) {
+            window.title = format!("FPS: {:.0}, dt: {:.2}ms", fps, dt);
+        }
+    }
+}
+
 #[derive(Resource, Deref, DerefMut)]
 struct Device(wgpu::Device);
 
@@ -53,6 +77,13 @@ struct Surface(wgpu::Surface<'static>);
 
 #[derive(Resource, Deref, DerefMut)]
 struct TrianglePipeline(wgpu::RenderPipeline);
+
+#[derive(Resource)]
+struct BlitPipeline {
+    pipeline: wgpu::RenderPipeline,
+    layout: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
+}
 
 fn setup_renderer(
     mut commands: Commands,
@@ -104,8 +135,8 @@ fn setup_renderer(
     };
     surface.configure(&device, &config);
 
-    let swapchain_capabilities = surface.get_capabilities(&adapter);
-    let swapchain_format = swapchain_capabilities.formats[0];
+    //let swapchain_capabilities = surface.get_capabilities(&adapter);
+    //let swapchain_format = swapchain_capabilities.formats[0];
 
     // TODO prepare shader/pipeline in separate system
     // Load the shaders from disk
@@ -132,6 +163,7 @@ fn setup_renderer(
             module: &shader,
             entry_point: Some("fs_main"),
             compilation_options: Default::default(),
+            // TODO store format in const
             targets: &[Some(TextureFormat::Rgba16Float.into())],
         }),
         primitive: wgpu::PrimitiveState::default(),
@@ -141,37 +173,61 @@ fn setup_renderer(
         cache: None,
     });
 
-    println!("Renderer setup done!");
+    // TODO move blit stuff to separate function/system
+    let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("blit"),
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("blit.wgsl"))),
+    });
+
+    let blit_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("blit"),
+        layout: None,
+        vertex: wgpu::VertexState {
+            module: &blit_shader,
+            entry_point: Some("vertex"),
+            compilation_options: Default::default(),
+            buffers: &[],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &blit_shader,
+            entry_point: Some("fragment"),
+            compilation_options: Default::default(),
+            targets: &[Some(config.format.into())],
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview: None,
+        cache: None,
+    });
+
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("blit_sampler"),
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::FilterMode::Nearest,
+        ..Default::default()
+    });
+    let blit_bind_group_layout = blit_pipeline.get_bind_group_layout(0);
+    commands.insert_resource(BlitPipeline {
+        pipeline: blit_pipeline,
+        sampler,
+        layout: blit_bind_group_layout,
+    });
 
     commands.insert_resource(Device(device));
     commands.insert_resource(Queue(queue));
     commands.insert_resource(SurfaceConfiguration(config));
     commands.insert_resource(Surface(surface));
     commands.insert_resource(TrianglePipeline(render_pipeline));
-}
 
-fn quit_on_q(input: Res<ButtonInput<KeyCode>>, mut exit_event: EventWriter<AppExit>) {
-    if input.just_pressed(KeyCode::KeyQ) {
-        exit_event.send_default();
-    }
-}
-
-fn update_window_title(
-    mut windows: Query<&mut Window, With<PrimaryWindow>>,
-    diagnostics: Res<DiagnosticsStore>,
-) {
-    for mut window in &mut windows {
-        if let (Some(fps), Some(dt)) = (
-            diagnostics
-                .get(&FrameTimeDiagnosticsPlugin::FPS)
-                .and_then(|fps| fps.smoothed()),
-            diagnostics
-                .get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)
-                .and_then(|dt| dt.smoothed()),
-        ) {
-            window.title = format!("FPS: {:.0}, dt: {:.2}ms", fps, dt);
-        }
-    }
+    println!("Renderer setup done!");
 }
 
 fn resize(
@@ -182,7 +238,6 @@ fn resize(
     windows: Query<&Window>,
 ) {
     for event in events.read() {
-        println!("resize");
         let window = windows.get(event.window).expect("window not found");
         let width = window.physical_width();
         let height = window.physical_height();
@@ -205,6 +260,7 @@ fn render(
     render_pipeline: Res<TrianglePipeline>,
     frame_count: Res<FrameCount>,
     mut main_texture_cache: Local<Option<(wgpu::Texture, wgpu::TextureView)>>,
+    blit_pipeline: Res<BlitPipeline>,
 ) {
     let frame = surface
         .get_current_texture()
@@ -223,13 +279,14 @@ fn render(
             usage: TextureUsages::COPY_SRC
                 | TextureUsages::COPY_DST
                 | TextureUsages::STORAGE_BINDING
-                | TextureUsages::RENDER_ATTACHMENT,
+                | TextureUsages::RENDER_ATTACHMENT
+                | TextureUsages::TEXTURE_BINDING,
             view_formats: &[main_texture_format],
         });
         let main_texture_view = main_texture.create_view(&TextureViewDescriptor::default());
         *main_texture_cache = Some((main_texture, main_texture_view));
     }
-    let Some((main_texture, main_texture_view)) = main_texture_cache.as_ref() else {
+    let Some((_main_texture, main_texture_view)) = main_texture_cache.as_ref() else {
         panic!("Failed to get main texture");
     };
 
@@ -237,20 +294,22 @@ fn render(
         device.create_command_encoder(&CommandEncoderDescriptor { label: None });
 
     let flash = (frame_count.0 as f32 / 120.0).sin().abs();
+    let clear_color = wgpu::Color {
+        r: 0.0,
+        g: 0.0,
+        b: flash as f64,
+        a: 1.0,
+    };
 
+    // Main render pass
     {
         let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Render Pass"),
+            label: Some("Main Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &main_texture_view,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.0,
-                        g: 0.0,
-                        b: flash as f64,
-                        a: 1.0,
-                    }),
+                    load: wgpu::LoadOp::Clear(clear_color),
                     store: wgpu::StoreOp::Store,
                 },
             })],
@@ -262,21 +321,36 @@ fn render(
         rpass.draw(0..3, 0..1);
     }
 
-    command_encoder.copy_texture_to_texture(
-        wgpu::ImageCopyTexture {
-            texture: main_texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::ImageCopyTexture {
-            texture: &frame.texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        frame.texture.size(),
-    );
+    // Blit main texture to swapchain
+    {
+        // TODO cache bind group
+        let blit_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Blit Bind Group"),
+            layout: &blit_pipeline.layout,
+            entries: &BindGroupEntries::sequential((
+                BindingResource::TextureView(main_texture_view),
+                BindingResource::Sampler(&blit_pipeline.sampler),
+            )),
+        });
+        let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Blit Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+
+        rpass.set_pipeline(&blit_pipeline.pipeline);
+        rpass.set_bind_group(0, Some(&blit_bind_group), &[]);
+        rpass.draw(0..3, 0..1);
+    }
 
     queue.submit(Some(command_encoder.finish()));
     frame.present();
