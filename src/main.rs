@@ -27,20 +27,24 @@ fn main() {
             InputPlugin,
         ))
         .add_systems(Startup, setup_renderer)
-        .add_systems(Update, (resize, render))
+        .add_systems(Update, (resize, render).chain())
         .run();
 }
 
 #[derive(Resource, Deref, DerefMut)]
 struct Device(wgpu::Device);
+
 #[derive(Resource, Deref, DerefMut)]
 struct Queue(wgpu::Queue);
+
 #[derive(Resource, Deref, DerefMut)]
 struct SurfaceConfiguration(wgpu::SurfaceConfiguration);
+
 #[derive(Resource, Deref, DerefMut)]
 struct Surface(wgpu::Surface<'static>);
+
 #[derive(Resource, Deref, DerefMut)]
-struct RenderPipeline(wgpu::RenderPipeline);
+struct TrianglePipeline(wgpu::RenderPipeline);
 
 fn setup_renderer(
     mut commands: Commands,
@@ -134,7 +138,7 @@ fn setup_renderer(
     commands.insert_resource(Queue(queue));
     commands.insert_resource(SurfaceConfiguration(config));
     commands.insert_resource(Surface(surface));
-    commands.insert_resource(RenderPipeline(render_pipeline));
+    commands.insert_resource(TrianglePipeline(render_pipeline));
 }
 
 fn resize(
@@ -145,6 +149,7 @@ fn resize(
     windows: Query<&Window>,
 ) {
     for event in events.read() {
+        println!("resize");
         let window = windows.get(event.window).expect("window not found");
         let width = window.physical_width();
         let height = window.physical_height();
@@ -164,9 +169,8 @@ fn render(
     surface: Res<Surface>,
     device: Res<Device>,
     queue: Res<Queue>,
-    render_pipeline: Res<RenderPipeline>,
+    render_pipeline: Res<TrianglePipeline>,
 ) {
-    println!("render");
     let frame = surface
         .get_current_texture()
         .expect("Failed to get texture");
@@ -203,5 +207,4 @@ fn render(
 
     queue.submit(Some(command_encoder.finish()));
     frame.present();
-    println!("present done.");
 }
