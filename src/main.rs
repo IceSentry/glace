@@ -28,6 +28,7 @@ fn main() {
         ))
         .add_systems(Startup, setup_renderer)
         .add_systems(Update, (resize, render).chain())
+        .add_systems(Update, quit_on_q)
         .run();
 }
 
@@ -139,6 +140,12 @@ fn setup_renderer(
     commands.insert_resource(SurfaceConfiguration(config));
     commands.insert_resource(Surface(surface));
     commands.insert_resource(TrianglePipeline(render_pipeline));
+}
+
+fn quit_on_q(input: Res<ButtonInput<KeyCode>>, mut exit_event: EventWriter<AppExit>) {
+    if input.just_pressed(KeyCode::KeyQ) {
+        exit_event.send_default();
+    }
 }
 
 fn resize(
