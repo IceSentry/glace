@@ -7,13 +7,15 @@ use bevy::{
     input::InputPlugin,
     log::LogPlugin,
     prelude::*,
-    render::render_resource::BindGroupEntries,
+    render::render_resource::{
+        binding_types::texture_storage_2d, BindGroupEntries, BindGroupLayoutEntries,
+    },
     window::{PresentMode, PrimaryWindow, RawHandleWrapper, WindowResized},
     winit::{WakeUp, WinitPlugin, WinitWindows},
 };
 use wgpu::{
-    BindingResource, CommandEncoderDescriptor, Features, Limits, MemoryHints, StoreOp,
-    TextureFormat, TextureUsages, TextureViewDescriptor,
+    BindingResource, CommandEncoderDescriptor, Features, Limits, MemoryHints, ShaderStages,
+    StoreOp, TextureFormat, TextureUsages, TextureViewDescriptor,
 };
 use winit::dpi::PhysicalSize;
 
@@ -90,6 +92,12 @@ struct BlitPipeline {
     sampler: wgpu::Sampler,
 }
 
+#[derive(Resource)]
+struct GradientPipeline {
+    pipeline: wgpu::ComputePipeline,
+    layout: wgpu::BindGroupLayout,
+}
+
 fn setup_renderer(
     mut commands: Commands,
     primary_window: Query<(Entity, &Window, &RawHandleWrapper), With<PrimaryWindow>>,
@@ -120,7 +128,7 @@ fn setup_renderer(
     let (device, queue) = futures_lite::future::block_on(adapter.request_device(
         &wgpu::DeviceDescriptor {
             required_features: Features::empty(),
-            required_limits: Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()),
+            required_limits: Limits::default().using_resolution(adapter.limits()),
             label: Some("RenderDevice"),
             memory_hints: MemoryHints::MemoryUsage,
         },
@@ -177,6 +185,36 @@ fn setup_renderer(
         multisample: wgpu::MultisampleState::default(),
         multiview: None,
         cache: None,
+    });
+
+    let gradient_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("compute_gradient.wgsl"))),
+    });
+    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: None,
+        entries: &BindGroupLayoutEntries::single(
+            ShaderStages::COMPUTE,
+            texture_storage_2d(MAIN_TEXTURE_FORMAT, wgpu::StorageTextureAccess::WriteOnly),
+        ),
+    });
+    let compute_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[&bind_group_layout],
+        push_constant_ranges: &[],
+    });
+    let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("Gradient compute pipeline"),
+        layout: Some(&compute_pipeline_layout),
+        module: &gradient_shader,
+        entry_point: Some("main"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+
+    commands.insert_resource(GradientPipeline {
+        pipeline: compute_pipeline,
+        layout: bind_group_layout,
     });
 
     let blit_pipeline = init_blit_pipeline(&device, config.format);
@@ -275,6 +313,7 @@ fn render(
     frame_count: Res<FrameCount>,
     mut main_texture_cache: Local<Option<(wgpu::Texture, wgpu::TextureView)>>,
     blit_pipeline: Res<BlitPipeline>,
+    gradient_pipeline: Res<GradientPipeline>,
 ) {
     let frame = surface
         .get_current_texture()
@@ -315,23 +354,46 @@ fn render(
     };
 
     // Main render pass
+    //{
+    //    let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+    //        label: Some("Main Render Pass"),
+    //        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+    //            view: &main_texture_view,
+    //            resolve_target: None,
+    //            ops: wgpu::Operations {
+    //                load: wgpu::LoadOp::Clear(clear_color),
+    //                store: wgpu::StoreOp::Store,
+    //            },
+    //        })],
+    //        depth_stencil_attachment: None,
+    //        occlusion_query_set: None,
+    //        timestamp_writes: None,
+    //    });
+    //    rpass.set_pipeline(&render_pipeline);
+    //    rpass.draw(0..3, 0..1);
+    //}
+
+    // Gradient compute
     {
-        let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Main Render Pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &main_texture_view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(clear_color),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            occlusion_query_set: None,
-            timestamp_writes: None,
+        let gradient_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Gradient Compute Bind Group"),
+            layout: &gradient_pipeline.layout,
+            entries: &BindGroupEntries::sequential((BindingResource::TextureView(
+                main_texture_view,
+            ),)),
         });
-        rpass.set_pipeline(&render_pipeline);
-        rpass.draw(0..3, 0..1);
+
+        let mut compute_pass =
+            command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+
+        compute_pass.set_pipeline(&gradient_pipeline.pipeline);
+        compute_pass.set_bind_group(0, &gradient_bind_group, &[]);
+        // TODO extract extent
+        compute_pass.dispatch_workgroups(
+            (frame.texture.size().width as f32 / 16.0).ceil() as u32,
+            (frame.texture.size().height as f32 / 16.0).ceil() as u32,
+            1,
+        );
     }
 
     // Blit main texture to swapchain
@@ -351,7 +413,7 @@ fn render(
                 view: &view,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    load: wgpu::LoadOp::Load,
                     store: StoreOp::Store,
                 },
             })],
