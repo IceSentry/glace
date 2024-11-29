@@ -2,7 +2,6 @@ use std::borrow::Cow;
 
 use bevy::{
     a11y::AccessibilityPlugin,
-    core::FrameCount,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     input::InputPlugin,
     log::LogPlugin,
@@ -10,14 +9,20 @@ use bevy::{
     render::render_resource::{
         binding_types::texture_storage_2d, BindGroupEntries, BindGroupLayoutEntries,
     },
-    window::{PresentMode, PrimaryWindow, RawHandleWrapper, WindowResized},
+    window::{PresentMode, PrimaryWindow, RawHandleWrapper, WindowResized, WindowResolution},
     winit::{WakeUp, WinitPlugin, WinitWindows},
+};
+use egui_plugin::{
+    egui_render_pass, EguiCtxRes, EguiPaintJobs, EguiPlugin, EguiRenderer, EguiScreenDesciptorRes,
+    EguiWinitState,
 };
 use wgpu::{
     BindingResource, CommandEncoderDescriptor, Features, Limits, MemoryHints, ShaderStages,
     StoreOp, TextureFormat, TextureUsages, TextureViewDescriptor,
 };
 use winit::dpi::PhysicalSize;
+
+mod egui_plugin;
 
 const MAIN_TEXTURE_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
 
@@ -30,6 +35,12 @@ fn main() {
                     title: "glace2".into(),
                     present_mode: PresentMode::AutoVsync,
                     visible: false,
+                    resolution: {
+                        let mut res =
+                            WindowResolution::new(1920.0, 1080.0).with_scale_factor_override(1.0);
+                        res.set_scale_factor(1.0);
+                        res
+                    },
                     ..default()
                 }),
                 ..default()
@@ -39,10 +50,11 @@ fn main() {
             FrameTimeDiagnosticsPlugin,
             InputPlugin,
             LogPlugin::default(),
+            EguiPlugin,
         ))
         .add_systems(Startup, setup_renderer)
-        .add_systems(Update, (resize, render).chain())
-        .add_systems(Update, (quit_on_q, update_window_title))
+        .add_systems(Update, (quit_on_q, update_window_title, ui))
+        .add_systems(PostUpdate, (resize, render).chain())
         .run();
 }
 
@@ -71,7 +83,7 @@ fn update_window_title(
 }
 
 #[derive(Resource, Deref, DerefMut)]
-struct Device(wgpu::Device);
+pub struct Device(pub wgpu::Device);
 
 #[derive(Resource, Deref, DerefMut)]
 struct Queue(wgpu::Queue);
@@ -149,6 +161,7 @@ fn setup_renderer(
     };
     surface.configure(&device, &config);
 
+    // TODO store swapchain format in ECS
     //let swapchain_capabilities = surface.get_capabilities(&adapter);
     //let swapchain_format = swapchain_capabilities.formats[0];
 
@@ -305,21 +318,42 @@ fn resize(
     }
 }
 
+fn ui(egui_ctx: Res<EguiCtxRes>) {
+    egui::Window::new("Hello").show(&egui_ctx.0, |ui| {
+        ui.label("glace2");
+        //egui_ctx.settings_ui(ui);
+    });
+}
+
 fn render(
     surface: Res<Surface>,
     device: Res<Device>,
     queue: Res<Queue>,
-    render_pipeline: Res<TrianglePipeline>,
-    frame_count: Res<FrameCount>,
     mut main_texture_cache: Local<Option<(wgpu::Texture, wgpu::TextureView)>>,
     blit_pipeline: Res<BlitPipeline>,
     gradient_pipeline: Res<GradientPipeline>,
+    windows: Query<Entity, With<Window>>,
+    winit_windows: NonSend<WinitWindows>,
+    screen_descriptor: Res<EguiScreenDesciptorRes>,
+    mut egui_renderer: NonSendMut<EguiRenderer>,
+    mut paint_jobs: ResMut<EguiPaintJobs>,
+    egui_ctx: Res<EguiCtxRes>,
+    mut state: ResMut<EguiWinitState>,
+    mut window_resized_events: EventReader<WindowResized>,
 ) {
+    let window = if let Ok(window) = windows.get_single() {
+        winit_windows
+            .get_window(window)
+            .expect("Failed to get primary window")
+    } else {
+        return;
+    };
     let frame = surface
         .get_current_texture()
         .expect("Failed to get texture");
     let view = frame.texture.create_view(&TextureViewDescriptor::default());
-    if main_texture_cache.is_none() {
+    // TODO better handle resize, maybe just use bevy's TextureCache
+    if main_texture_cache.is_none() || window_resized_events.read().count() > 0 {
         let main_texture_format = MAIN_TEXTURE_FORMAT;
         let main_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Main Texture"),
@@ -342,36 +376,7 @@ fn render(
         panic!("Failed to get main texture");
     };
 
-    let mut command_encoder =
-        device.create_command_encoder(&CommandEncoderDescriptor { label: None });
-
-    let flash = (frame_count.0 as f32 / 120.0).sin().abs();
-    let clear_color = wgpu::Color {
-        r: 0.0,
-        g: 0.0,
-        b: flash as f64,
-        a: 1.0,
-    };
-
-    // Main render pass
-    //{
-    //    let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-    //        label: Some("Main Render Pass"),
-    //        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-    //            view: &main_texture_view,
-    //            resolve_target: None,
-    //            ops: wgpu::Operations {
-    //                load: wgpu::LoadOp::Clear(clear_color),
-    //                store: wgpu::StoreOp::Store,
-    //            },
-    //        })],
-    //        depth_stencil_attachment: None,
-    //        occlusion_query_set: None,
-    //        timestamp_writes: None,
-    //    });
-    //    rpass.set_pipeline(&render_pipeline);
-    //    rpass.draw(0..3, 0..1);
-    //}
+    let mut command_encoder = device.create_command_encoder(&CommandEncoderDescriptor::default());
 
     // Gradient compute
     {
@@ -426,6 +431,20 @@ fn render(
         rpass.set_bind_group(0, &blit_bind_group, &[]);
         rpass.draw(0..3, 0..1);
     }
+
+    // Render egui directly to the swapchain
+    egui_render_pass(
+        window,
+        &mut egui_renderer,
+        &mut paint_jobs,
+        &egui_ctx,
+        &mut state,
+        &screen_descriptor,
+        &device,
+        &queue,
+        &mut command_encoder,
+        &view,
+    );
 
     queue.submit(Some(command_encoder.finish()));
     frame.present();

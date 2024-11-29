@@ -20,3 +20,6 @@ bevy = { version = "0.15.0-rc.3", default-features = false, features = [
 ] }
 anyhow = "1.0.93"
 futures-lite = "2.5.0"
+egui = { git = "https://github.com/emilk/egui", rev = "10791cc43da0cb42f913fad7c3980c696cdd5418" }
+egui-wgpu = { git = "https://github.com/emilk/egui", rev = "10791cc43da0cb42f913fad7c3980c696cdd5418" }
+egui-winit = { git = "https://github.com/emilk/egui", rev = "10791cc43da0cb42f913fad7c3980c696cdd5418" }
