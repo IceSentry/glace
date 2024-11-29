@@ -5,6 +5,7 @@ use bevy::{
     core::FrameCount,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     input::InputPlugin,
+    log::LogPlugin,
     prelude::*,
     render::render_resource::BindGroupEntries,
     window::{PresentMode, PrimaryWindow, RawHandleWrapper, WindowResized},
@@ -16,6 +17,8 @@ use wgpu::{
 };
 use winit::dpi::PhysicalSize;
 
+const MAIN_TEXTURE_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
+
 fn main() {
     App::new()
         .add_plugins((
@@ -24,6 +27,7 @@ fn main() {
                 primary_window: Some(Window {
                     title: "glace2".into(),
                     present_mode: PresentMode::AutoVsync,
+                    visible: false,
                     ..default()
                 }),
                 ..default()
@@ -32,6 +36,7 @@ fn main() {
             WinitPlugin::<WakeUp>::default(),
             FrameTimeDiagnosticsPlugin,
             InputPlugin,
+            LogPlugin::default(),
         ))
         .add_systems(Startup, setup_renderer)
         .add_systems(Update, (resize, render).chain())
@@ -90,6 +95,7 @@ fn setup_renderer(
     primary_window: Query<(Entity, &Window, &RawHandleWrapper), With<PrimaryWindow>>,
     winit_windows: NonSendMut<WinitWindows>,
 ) {
+    info!("Start renderer setup");
     let (window_entity, window, raw_handle_wrapper) = primary_window.single();
     let winit_window = winit_windows
         .get_window(window_entity)
@@ -164,7 +170,7 @@ fn setup_renderer(
             entry_point: Some("fs_main"),
             compilation_options: Default::default(),
             // TODO store format in const
-            targets: &[Some(TextureFormat::Rgba16Float.into())],
+            targets: &[Some(MAIN_TEXTURE_FORMAT.into())],
         }),
         primitive: wgpu::PrimitiveState::default(),
         depth_stencil: None,
@@ -173,7 +179,21 @@ fn setup_renderer(
         cache: None,
     });
 
-    // TODO move blit stuff to separate function/system
+    let blit_pipeline = init_blit_pipeline(&device, config.format);
+    commands.insert_resource(blit_pipeline);
+
+    commands.insert_resource(Device(device));
+    commands.insert_resource(Queue(queue));
+    commands.insert_resource(SurfaceConfiguration(config));
+    commands.insert_resource(Surface(surface));
+    commands.insert_resource(TrianglePipeline(render_pipeline));
+
+    winit_window.set_visible(true);
+
+    info!("Renderer setup done!");
+}
+
+fn init_blit_pipeline(device: &wgpu::Device, target_format: TextureFormat) -> BlitPipeline {
     let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("blit"),
         source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("blit.wgsl"))),
@@ -192,13 +212,14 @@ fn setup_renderer(
             module: &blit_shader,
             entry_point: Some("fragment"),
             compilation_options: Default::default(),
-            targets: &[Some(config.format.into())],
+            targets: &[Some(target_format.into())],
         }),
         primitive: wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,
             ..Default::default()
         },
         depth_stencil: None,
+        // TODO MSAA
         multisample: wgpu::MultisampleState::default(),
         multiview: None,
         cache: None,
@@ -215,19 +236,12 @@ fn setup_renderer(
         ..Default::default()
     });
     let blit_bind_group_layout = blit_pipeline.get_bind_group_layout(0);
-    commands.insert_resource(BlitPipeline {
+
+    BlitPipeline {
         pipeline: blit_pipeline,
         sampler,
         layout: blit_bind_group_layout,
-    });
-
-    commands.insert_resource(Device(device));
-    commands.insert_resource(Queue(queue));
-    commands.insert_resource(SurfaceConfiguration(config));
-    commands.insert_resource(Surface(surface));
-    commands.insert_resource(TrianglePipeline(render_pipeline));
-
-    println!("Renderer setup done!");
+    }
 }
 
 fn resize(
@@ -267,8 +281,7 @@ fn render(
         .expect("Failed to get texture");
     let view = frame.texture.create_view(&TextureViewDescriptor::default());
     if main_texture_cache.is_none() {
-        let main_texture_format = wgpu::TextureFormat::Rgba16Float;
-        // TODO cache this texture
+        let main_texture_format = MAIN_TEXTURE_FORMAT;
         let main_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Main Texture"),
             size: frame.texture.size(),
@@ -348,7 +361,7 @@ fn render(
         });
 
         rpass.set_pipeline(&blit_pipeline.pipeline);
-        rpass.set_bind_group(0, Some(&blit_bind_group), &[]);
+        rpass.set_bind_group(0, &blit_bind_group, &[]);
         rpass.draw(0..3, 0..1);
     }
 
