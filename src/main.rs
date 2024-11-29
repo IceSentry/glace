@@ -17,12 +17,13 @@ use egui_plugin::{
     EguiWinitState,
 };
 use wgpu::{
-    BindingResource, CommandEncoderDescriptor, Features, Limits, MemoryHints, ShaderStages,
-    StoreOp, TextureFormat, TextureUsages, TextureViewDescriptor,
+    BindingResource, CommandEncoderDescriptor, Features, MemoryHints, PushConstantRange,
+    ShaderStages, StoreOp, TextureFormat, TextureUsages, TextureViewDescriptor,
 };
 use winit::dpi::PhysicalSize;
 
 mod egui_plugin;
+mod ui;
 
 const MAIN_TEXTURE_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
 
@@ -53,8 +54,14 @@ fn main() {
             EguiPlugin,
         ))
         .add_systems(Startup, setup_renderer)
-        .add_systems(Update, (quit_on_q, update_window_title, ui))
+        .add_systems(Update, (quit_on_q, update_window_title, ui::ui))
         .add_systems(PostUpdate, (resize, render).chain())
+        .insert_resource(ComputePushConstants {
+            data1: Vec4::new(1.0, 0.0, 0.0, 1.0),
+            data2: Vec4::new(0.0, 0.0, 1.0, 1.0),
+            data3: Vec4::new(1.0, 0.0, 0.0, 1.0),
+            data4: Vec4::new(1.0, 0.0, 0.0, 1.0),
+        })
         .run();
 }
 
@@ -94,9 +101,6 @@ struct SurfaceConfiguration(wgpu::SurfaceConfiguration);
 #[derive(Resource, Deref, DerefMut)]
 struct Surface(wgpu::Surface<'static>);
 
-#[derive(Resource, Deref, DerefMut)]
-struct TrianglePipeline(wgpu::RenderPipeline);
-
 #[derive(Resource)]
 struct BlitPipeline {
     pipeline: wgpu::RenderPipeline,
@@ -108,6 +112,14 @@ struct BlitPipeline {
 struct GradientPipeline {
     pipeline: wgpu::ComputePipeline,
     layout: wgpu::BindGroupLayout,
+}
+#[derive(Resource, bytemuck::NoUninit, Clone, Copy)]
+#[repr(C)]
+struct ComputePushConstants {
+    data1: Vec4,
+    data2: Vec4,
+    data3: Vec4,
+    data4: Vec4,
 }
 
 fn setup_renderer(
@@ -139,8 +151,8 @@ fn setup_renderer(
 
     let (device, queue) = futures_lite::future::block_on(adapter.request_device(
         &wgpu::DeviceDescriptor {
-            required_features: Features::empty(),
-            required_limits: Limits::default().using_resolution(adapter.limits()),
+            required_features: Features::PUSH_CONSTANTS,
+            required_limits: adapter.limits(),
             label: Some("RenderDevice"),
             memory_hints: MemoryHints::MemoryUsage,
         },
@@ -166,40 +178,6 @@ fn setup_renderer(
     //let swapchain_format = swapchain_capabilities.formats[0];
 
     // TODO prepare shader/pipeline in separate system
-    // Load the shaders from disk
-    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: None,
-        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
-    });
-
-    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: None,
-        bind_group_layouts: &[],
-        push_constant_ranges: &[],
-    });
-    let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("Triangle Pipeline"),
-        layout: Some(&pipeline_layout),
-        vertex: wgpu::VertexState {
-            module: &shader,
-            entry_point: Some("vs_main"),
-            buffers: &[],
-            compilation_options: Default::default(),
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &shader,
-            entry_point: Some("fs_main"),
-            compilation_options: Default::default(),
-            // TODO store format in const
-            targets: &[Some(MAIN_TEXTURE_FORMAT.into())],
-        }),
-        primitive: wgpu::PrimitiveState::default(),
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState::default(),
-        multiview: None,
-        cache: None,
-    });
-
     let gradient_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("compute_gradient.wgsl"))),
@@ -214,7 +192,10 @@ fn setup_renderer(
     let compute_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
         bind_group_layouts: &[&bind_group_layout],
-        push_constant_ranges: &[],
+        push_constant_ranges: &[PushConstantRange {
+            stages: ShaderStages::COMPUTE,
+            range: 0..std::mem::size_of::<ComputePushConstants>() as u32,
+        }],
     });
     let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
         label: Some("Gradient compute pipeline"),
@@ -237,7 +218,6 @@ fn setup_renderer(
     commands.insert_resource(Queue(queue));
     commands.insert_resource(SurfaceConfiguration(config));
     commands.insert_resource(Surface(surface));
-    commands.insert_resource(TrianglePipeline(render_pipeline));
 
     winit_window.set_visible(true);
 
@@ -318,13 +298,6 @@ fn resize(
     }
 }
 
-fn ui(egui_ctx: Res<EguiCtxRes>) {
-    egui::Window::new("Hello").show(&egui_ctx.0, |ui| {
-        ui.label("glace2");
-        //egui_ctx.settings_ui(ui);
-    });
-}
-
 fn render(
     surface: Res<Surface>,
     device: Res<Device>,
@@ -340,6 +313,7 @@ fn render(
     egui_ctx: Res<EguiCtxRes>,
     mut state: ResMut<EguiWinitState>,
     mut window_resized_events: EventReader<WindowResized>,
+    compute_push_constants: Res<ComputePushConstants>,
 ) {
     let window = if let Ok(window) = windows.get_single() {
         winit_windows
@@ -393,6 +367,7 @@ fn render(
 
         compute_pass.set_pipeline(&gradient_pipeline.pipeline);
         compute_pass.set_bind_group(0, &gradient_bind_group, &[]);
+        compute_pass.set_push_constants(0, bytemuck::bytes_of(&*compute_push_constants));
         // TODO extract extent
         compute_pass.dispatch_workgroups(
             (frame.texture.size().width as f32 / 16.0).ceil() as u32,
@@ -429,6 +404,7 @@ fn render(
 
         rpass.set_pipeline(&blit_pipeline.pipeline);
         rpass.set_bind_group(0, &blit_bind_group, &[]);
+
         rpass.draw(0..3, 0..1);
     }
 
