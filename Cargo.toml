@@ -17,6 +17,7 @@ bevy = { version = "0.15.0", default-features = false, features = [
     "bevy_winit",
     "bevy_render",
     "multi_threaded",
+    "bevy_window",
 ] }
 anyhow = "1.0.93"
 futures-lite = "2.5.0"
