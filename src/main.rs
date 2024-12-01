@@ -1,3 +1,6 @@
+#![allow(clippy::type_complexity)]
+#![allow(clippy::too_many_arguments)]
+
 use std::borrow::Cow;
 
 use bevy::{
@@ -35,10 +38,13 @@ fn main() {
                 primary_window: Some(Window {
                     title: "glace2".into(),
                     present_mode: PresentMode::AutoVsync,
+                    // Hide the window until the gpu is ready to draw
                     visible: false,
                     resolution: {
-                        let mut res =
-                            WindowResolution::new(1920.0, 1080.0).with_scale_factor_override(1.0);
+                        // All this forced scale factor thing is because macos defaults to a really
+                        // high scale factor
+                        let mut res = WindowResolution::new(1920.0, 1080.0);
+                        res.set_scale_factor_override(Some(1.0));
                         res.set_scale_factor(1.0);
                         res
                     },
@@ -59,8 +65,6 @@ fn main() {
         .insert_resource(ComputePushConstants {
             data1: Vec4::new(1.0, 0.0, 0.0, 1.0),
             data2: Vec4::new(0.0, 0.0, 1.0, 1.0),
-            data3: Vec4::new(1.0, 0.0, 0.0, 1.0),
-            data4: Vec4::new(1.0, 0.0, 0.0, 1.0),
         })
         .run();
 }
@@ -113,13 +117,17 @@ struct GradientPipeline {
     pipeline: wgpu::ComputePipeline,
     layout: wgpu::BindGroupLayout,
 }
+#[derive(Resource)]
+struct MeshPipeline {
+    pipeline: wgpu::RenderPipeline,
+    //layout: wgpu::BindGroupLayout,
+}
+
 #[derive(Resource, bytemuck::NoUninit, Clone, Copy)]
 #[repr(C)]
 struct ComputePushConstants {
     data1: Vec4,
     data2: Vec4,
-    data3: Vec4,
-    data4: Vec4,
 }
 
 fn setup_renderer(
@@ -128,10 +136,12 @@ fn setup_renderer(
     winit_windows: NonSendMut<WinitWindows>,
 ) {
     info!("Start renderer setup");
+
     let (window_entity, window, raw_handle_wrapper) = primary_window.single();
     let winit_window = winit_windows
         .get_window(window_entity)
         .expect("Failed to get winit window");
+
     let mut size = winit_window.inner_size();
     size.width = size.width.max(1);
     size.height = size.height.max(1);
@@ -173,17 +183,83 @@ fn setup_renderer(
     };
     surface.configure(&device, &config);
 
-    // TODO store swapchain format in ECS
-    //let swapchain_capabilities = surface.get_capabilities(&adapter);
-    //let swapchain_format = swapchain_capabilities.formats[0];
+    let mesh_pipeline = init_mesh_pipeline_gradient_pipeline(&device);
+    commands.insert_resource(mesh_pipeline);
 
-    // TODO prepare shader/pipeline in separate system
+    let gradient_pipeline = init_compute_gradient_pipeline(&device);
+    commands.insert_resource(gradient_pipeline);
+
+    let swapchain_format = surface.get_capabilities(&adapter).formats[0];
+    let blit_pipeline = init_blit_pipeline(&device, swapchain_format);
+    commands.insert_resource(blit_pipeline);
+
+    commands.insert_resource(Device(device));
+    commands.insert_resource(Queue(queue));
+    commands.insert_resource(SurfaceConfiguration(config));
+    commands.insert_resource(Surface(surface));
+
+    // At this point, the gpu is ready to draw so we can make the window visible
+    winit_window.set_visible(true);
+
+    info!("Renderer setup done!");
+}
+
+fn init_mesh_pipeline_gradient_pipeline(device: &wgpu::Device) -> MeshPipeline {
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("mesh.wgsl"))),
+    });
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[],
+        push_constant_ranges: &[],
+    });
+    // TODO consider making a builder thing
+    let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Mesh Opaque Pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vertex"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fragment"),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: MAIN_TEXTURE_FORMAT,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            front_face: wgpu::FrontFace::Cw,
+            cull_mode: None,
+            polygon_mode: wgpu::PolygonMode::Fill,
+            ..default()
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview: None,
+        cache: None,
+    });
+    //let bind_group_layout = render_pipeline.get_bind_group_layout(0);
+    MeshPipeline {
+        pipeline: render_pipeline,
+        //layout: bind_group_layout,
+    }
+}
+
+fn init_compute_gradient_pipeline(device: &wgpu::Device) -> GradientPipeline {
     let gradient_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("compute_gradient.wgsl"))),
     });
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: None,
+        label: Some("Compute Gradient Bind Group Layout"),
         entries: &BindGroupLayoutEntries::single(
             ShaderStages::COMPUTE,
             texture_storage_2d(MAIN_TEXTURE_FORMAT, wgpu::StorageTextureAccess::WriteOnly),
@@ -198,30 +274,17 @@ fn setup_renderer(
         }],
     });
     let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: Some("Gradient compute pipeline"),
+        label: Some("Compute Gradient Pipeline"),
         layout: Some(&compute_pipeline_layout),
         module: &gradient_shader,
         entry_point: Some("main"),
         compilation_options: Default::default(),
         cache: None,
     });
-
-    commands.insert_resource(GradientPipeline {
+    GradientPipeline {
         pipeline: compute_pipeline,
         layout: bind_group_layout,
-    });
-
-    let blit_pipeline = init_blit_pipeline(&device, config.format);
-    commands.insert_resource(blit_pipeline);
-
-    commands.insert_resource(Device(device));
-    commands.insert_resource(Queue(queue));
-    commands.insert_resource(SurfaceConfiguration(config));
-    commands.insert_resource(Surface(surface));
-
-    winit_window.set_visible(true);
-
-    info!("Renderer setup done!");
+    }
 }
 
 fn init_blit_pipeline(device: &wgpu::Device, target_format: TextureFormat) -> BlitPipeline {
@@ -250,7 +313,6 @@ fn init_blit_pipeline(device: &wgpu::Device, target_format: TextureFormat) -> Bl
             ..Default::default()
         },
         depth_stencil: None,
-        // TODO MSAA
         multisample: wgpu::MultisampleState::default(),
         multiview: None,
         cache: None,
@@ -314,6 +376,7 @@ fn render(
     mut state: ResMut<EguiWinitState>,
     mut window_resized_events: EventReader<WindowResized>,
     compute_push_constants: Res<ComputePushConstants>,
+    mesh_pipeline: Res<MeshPipeline>,
 ) {
     let window = if let Ok(window) = windows.get_single() {
         winit_windows
@@ -352,8 +415,13 @@ fn render(
 
     let mut command_encoder = device.create_command_encoder(&CommandEncoderDescriptor::default());
 
+    let draw_extent = frame.texture.size();
+
     // Gradient compute
     {
+        #[cfg(feature = "trace")]
+        let _span = info_span!("compute gradient").entered();
+
         let gradient_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Gradient Compute Bind Group"),
             layout: &gradient_pipeline.layout,
@@ -370,14 +438,50 @@ fn render(
         compute_pass.set_push_constants(0, bytemuck::bytes_of(&*compute_push_constants));
         // TODO extract extent
         compute_pass.dispatch_workgroups(
-            (frame.texture.size().width as f32 / 16.0).ceil() as u32,
-            (frame.texture.size().height as f32 / 16.0).ceil() as u32,
+            (draw_extent.width as f32 / 16.0).ceil() as u32,
+            (draw_extent.height as f32 / 16.0).ceil() as u32,
             1,
         );
     }
 
+    // Main opaque mesh
+    {
+        #[cfg(feature = "trace")]
+        let _span = info_span!("main opaque mesh").entered();
+
+        let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Main Opaque Mesh Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: main_texture_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
+        rpass.set_pipeline(&mesh_pipeline.pipeline);
+        let draw_extent = frame.texture.size();
+        rpass.set_viewport(
+            0.0,
+            0.0,
+            draw_extent.width as f32,
+            draw_extent.height as f32,
+            0.0,
+            1.0,
+        );
+        rpass.set_scissor_rect(0, 0, draw_extent.width, draw_extent.height);
+        rpass.draw(0..3, 0..1);
+    }
+
     // Blit main texture to swapchain
     {
+        #[cfg(feature = "trace")]
+        let _span = info_span!("blit").entered();
+
         // TODO cache bind group
         let blit_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Blit Bind Group"),
@@ -404,11 +508,10 @@ fn render(
 
         rpass.set_pipeline(&blit_pipeline.pipeline);
         rpass.set_bind_group(0, &blit_bind_group, &[]);
-
         rpass.draw(0..3, 0..1);
     }
 
-    // Render egui directly to the swapchain
+    // Render egui
     egui_render_pass(
         window,
         &mut egui_renderer,

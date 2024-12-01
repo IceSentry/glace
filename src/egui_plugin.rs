@@ -155,22 +155,16 @@ pub fn egui_render_pass(
     paint_jobs.0 = egui_ctx.tessellate(shapes, window.scale_factor() as f32);
 
     for (id, image_delta) in textures_delta.set {
-        egui_renderer.update_texture(&device, &queue, id, &image_delta);
+        egui_renderer.update_texture(device, queue, id, &image_delta);
     }
 
-    egui_renderer.update_buffers(
-        &device,
-        &queue,
-        encoder,
-        &paint_jobs.0,
-        &screen_descriptor.0,
-    );
+    egui_renderer.update_buffers(device, queue, encoder, &paint_jobs.0, &screen_descriptor.0);
 
     {
         let mut rpass = encoder
             .begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
@@ -212,7 +206,11 @@ fn handle_window_events(
             window,
             &winit::event::WindowEvent::ScaleFactorChanged {
                 scale_factor: ev.scale_factor,
-                inner_size_writer: unsafe { std::mem::transmute([0; 2]) },
+                inner_size_writer: unsafe {
+                    std::mem::transmute::<[u8; 8], winit::event::InnerSizeWriter>(
+                        [0u8; std::mem::size_of::<winit::event::InnerSizeWriter>()],
+                    )
+                },
             },
         );
     }
@@ -249,7 +247,7 @@ fn handle_mouse_events(
 
     for ev in cursor_moved_events.read() {
         let _ = platform.on_window_event(
-            &window,
+            window,
             &winit::event::WindowEvent::CursorMoved {
                 device_id: winit::event::DeviceId::dummy(),
                 position: winit::dpi::PhysicalPosition {
@@ -266,7 +264,7 @@ fn handle_mouse_events(
 
     for ev in mouse_button_input_events.read() {
         let _ = platform.on_window_event(
-            &window,
+            window,
             &winit::event::WindowEvent::MouseInput {
                 device_id: winit::event::DeviceId::dummy(),
                 state: match ev.state {
@@ -287,7 +285,7 @@ fn handle_mouse_events(
 
     for ev in mouse_wheel_events.read() {
         let _ = platform.on_window_event(
-            &window,
+            window,
             &winit::event::WindowEvent::MouseWheel {
                 device_id: winit::event::DeviceId::dummy(),
                 phase: winit::event::TouchPhase::Moved,

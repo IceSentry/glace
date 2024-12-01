@@ -3,8 +3,6 @@
 struct PushConstants {
     data1: vec4<f32>,
     data2: vec4<f32>,
-    data3: vec4<f32>,
-    data4: vec4<f32>,
 };
 var<push_constant> constants: PushConstants;
 

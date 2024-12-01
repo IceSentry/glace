@@ -29,11 +29,11 @@ fn vertex(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     return VertexOutput(clip_position, uv);
 }
 
-@group(0) @binding(0) var r_color: texture_2d<f32>;
-@group(0) @binding(1) var r_sampler: sampler;
+@group(0) @binding(0) var main_texture: texture_2d<f32>;
+@group(0) @binding(1) var blit_sampler: sampler;
 
 @fragment
 fn fragment(vertex: VertexOutput) -> @location(0) vec4<f32> {
-    return textureSample(r_color, r_sampler, vertex.uv);
+    return textureSample(main_texture, blit_sampler, vertex.uv);
 }
 
