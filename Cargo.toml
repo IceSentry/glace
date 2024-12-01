@@ -12,7 +12,7 @@ opt-level = 3
 [dependencies]
 wgpu = "23.0.1"
 winit = "0.30.5"
-bevy = { version = "0.15.0-rc.3", default-features = false, features = [
+bevy = { version = "0.15.0", default-features = false, features = [
     "bevy_asset",
     "bevy_winit",
     "bevy_render",
