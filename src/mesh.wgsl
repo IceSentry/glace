@@ -18,12 +18,12 @@ struct VertexBuffer {
 @group(0) @binding(0)
 var<storage> vertex_buffer: VertexBuffer;
 
-struct PushConstants {
-    world_matrix: mat4x4<f32>,
-    vertex_buffer: VertexBuffer,
-};
-
-var<push_constant> constants: PushConstants;
+// struct PushConstants {
+//     world_matrix: mat4x4<f32>,
+//     vertex_buffer: VertexBuffer,
+// };
+// 
+// var<push_constant> constants: PushConstants;
 
 @vertex
 fn vertex(@builtin(vertex_index) in_vertex_index: u32) -> VertexOutput {

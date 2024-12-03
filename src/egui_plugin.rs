@@ -9,7 +9,7 @@ use bevy::{
     window::{
         prelude::*, PrimaryWindow, WindowCloseRequested, WindowResized, WindowScaleFactorChanged,
     },
-    winit::WinitWindows,
+    winit::{RawWinitWindowEvent, WinitWindows},
 };
 use wgpu::{rwh::HasDisplayHandle, CommandEncoder, TextureView};
 use winit::dpi::PhysicalSize;
@@ -41,7 +41,7 @@ impl Plugin for EguiPlugin {
             .add_systems(PreUpdate, begin_frame)
             // .add_system(update_render_pass)
             // .add_system(render)
-            .add_systems(Update, (handle_mouse_events, handle_window_events, on_exit));
+            .add_systems(Update, (handle_winit_events, on_exit));
     }
 }
 
@@ -185,13 +185,11 @@ pub fn egui_render_pass(
     }
 }
 
-fn handle_window_events(
+fn handle_winit_events(
+    mut winit_events: EventReader<RawWinitWindowEvent>,
+    windows: Query<Entity, With<PrimaryWindow>>,
+    winit_windows: NonSend<WinitWindows>,
     mut egui_winit_state: ResMut<EguiWinitState>,
-    windows: Query<Entity, With<PrimaryWindow>>,
-    winit_windows: NonSend<WinitWindows>,
-    mut screen_descriptor: ResMut<EguiScreenDesciptorRes>,
-    mut scale_factor_changed_event: EventReader<WindowScaleFactorChanged>,
-    mut window_resized_event: EventReader<WindowResized>,
 ) {
     let window = if let Ok(window) = windows.get_single() {
         winit_windows
@@ -200,107 +198,7 @@ fn handle_window_events(
     } else {
         return;
     };
-    for ev in scale_factor_changed_event.read() {
-        screen_descriptor.0.pixels_per_point = ev.scale_factor as f32;
-        let _ = egui_winit_state.on_window_event(
-            window,
-            &winit::event::WindowEvent::ScaleFactorChanged {
-                scale_factor: ev.scale_factor,
-                inner_size_writer: unsafe {
-                    std::mem::transmute::<[u8; 8], winit::event::InnerSizeWriter>(
-                        [0u8; std::mem::size_of::<winit::event::InnerSizeWriter>()],
-                    )
-                },
-            },
-        );
-    }
-    for ev in window_resized_event.read() {
-        screen_descriptor.0.size_in_pixels[0] = ev.width as u32;
-        screen_descriptor.0.size_in_pixels[1] = ev.height as u32;
-        let _ = egui_winit_state.on_window_event(
-            window,
-            &winit::event::WindowEvent::Resized(PhysicalSize::new(
-                ev.width as u32,
-                ev.height as u32,
-            )),
-        );
-    }
-}
-
-/// Wraps bevy mouse events and convert them back to fake winit events to send to the egui winit platform support
-fn handle_mouse_events(
-    mut mouse_button_input_events: EventReader<MouseButtonInput>,
-    mut cursor_moved_events: EventReader<CursorMoved>,
-    mut mouse_wheel_events: EventReader<MouseWheel>,
-    mut platform: ResMut<EguiWinitState>,
-    windows: Query<Entity, With<PrimaryWindow>>,
-    winit_windows: NonSend<WinitWindows>,
-) {
-    let window = if let Ok(window) = windows.get_single() {
-        winit_windows
-            .get_window(window)
-            .expect("Failed to get primary window")
-    } else {
-        return;
-    };
-    let window_height = window.inner_size().height;
-
-    for ev in cursor_moved_events.read() {
-        let _ = platform.on_window_event(
-            window,
-            &winit::event::WindowEvent::CursorMoved {
-                device_id: winit::event::DeviceId::dummy(),
-                position: winit::dpi::PhysicalPosition {
-                    x: ev.position.x as f64,
-                    y: if ev.position.y as u32 > window_height {
-                        0.0
-                    } else {
-                        (ev.position.y as u32) as f64
-                    },
-                },
-            },
-        );
-    }
-
-    for ev in mouse_button_input_events.read() {
-        let _ = platform.on_window_event(
-            window,
-            &winit::event::WindowEvent::MouseInput {
-                device_id: winit::event::DeviceId::dummy(),
-                state: match ev.state {
-                    bevy::input::ButtonState::Pressed => winit::event::ElementState::Pressed,
-                    bevy::input::ButtonState::Released => winit::event::ElementState::Released,
-                },
-                button: match ev.button {
-                    MouseButton::Left => winit::event::MouseButton::Left,
-                    MouseButton::Right => winit::event::MouseButton::Right,
-                    MouseButton::Middle => winit::event::MouseButton::Middle,
-                    MouseButton::Back => winit::event::MouseButton::Back,
-                    MouseButton::Forward => winit::event::MouseButton::Forward,
-                    MouseButton::Other(x) => winit::event::MouseButton::Other(x),
-                },
-            },
-        );
-    }
-
-    for ev in mouse_wheel_events.read() {
-        let _ = platform.on_window_event(
-            window,
-            &winit::event::WindowEvent::MouseWheel {
-                device_id: winit::event::DeviceId::dummy(),
-                phase: winit::event::TouchPhase::Moved,
-                delta: match ev.unit {
-                    bevy::input::mouse::MouseScrollUnit::Line => {
-                        winit::event::MouseScrollDelta::LineDelta(ev.x, ev.y)
-                    }
-                    bevy::input::mouse::MouseScrollUnit::Pixel => {
-                        winit::event::MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition {
-                            x: ev.x as f64,
-                            y: ev.y as f64,
-                        })
-                    }
-                },
-            },
-        );
+    for ev in winit_events.read() {
+        let _ = egui_winit_state.on_window_event(window, &ev.event);
     }
 }
