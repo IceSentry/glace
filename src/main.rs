@@ -10,7 +10,7 @@ use bevy::{
     log::LogPlugin,
     prelude::*,
     render::render_resource::{
-        binding_types::texture_storage_2d, BindGroupEntries, BindGroupLayoutEntries,
+        binding_types::texture_storage_2d, BindGroupEntries, BindGroupLayoutEntries, ShaderType,
     },
     window::{PresentMode, PrimaryWindow, RawHandleWrapper, WindowResized, WindowResolution},
     winit::{WakeUp, WinitPlugin, WinitWindows},
@@ -20,13 +20,17 @@ use egui_plugin::{
     EguiWinitState,
 };
 use wgpu::{
-    BindingResource, CommandEncoderDescriptor, Features, MemoryHints, PushConstantRange,
-    ShaderStages, StoreOp, TextureFormat, TextureUsages, TextureViewDescriptor,
+    util::RenderEncoder, BindingResource, BufferUsages, CommandEncoderDescriptor, Features,
+    MemoryHints, PushConstantRange, ShaderStages, StoreOp, TextureFormat, TextureUsages,
+    TextureViewDescriptor,
 };
 use winit::dpi::PhysicalSize;
 
+mod buffer_vec;
 mod egui_plugin;
 mod ui;
+
+use buffer_vec::BufferVec;
 
 const MAIN_TEXTURE_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
 
@@ -130,6 +134,9 @@ struct ComputePushConstants {
     data2: Vec4,
 }
 
+#[derive(Resource)]
+struct RectangleBuffers(GpuMeshBuffers);
+
 fn setup_renderer(
     mut commands: Commands,
     primary_window: Query<(Entity, &Window, &RawHandleWrapper), With<PrimaryWindow>>,
@@ -192,6 +199,9 @@ fn setup_renderer(
     let swapchain_format = surface.get_capabilities(&adapter).formats[0];
     let blit_pipeline = init_blit_pipeline(&device, swapchain_format);
     commands.insert_resource(blit_pipeline);
+
+    let rectangle_buffers = init_default_data(&device, &queue);
+    commands.insert_resource(RectangleBuffers(rectangle_buffers));
 
     commands.insert_resource(Device(device));
     commands.insert_resource(Queue(queue));
@@ -360,10 +370,76 @@ fn resize(
     }
 }
 
+#[derive(Default, Clone, Copy, ShaderType)]
+struct Vertex {
+    position: Vec3,
+    uv_x: f32,
+    normal: Vec3,
+    uv_y: f32,
+    color: Vec4,
+}
+
+struct GpuMeshBuffers {
+    index_buffer: BufferVec<u32>,
+    vertex_buffer: BufferVec<Vertex>,
+}
+
+struct GpuDrawPushConstants {
+    world_matrix: Mat4,
+}
+
+fn upload_mesh(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    indices: &[u32],
+    vertices: &[Vertex],
+) -> GpuMeshBuffers {
+    let mut vertex_buffer = BufferVec::new(BufferUsages::STORAGE);
+    vertex_buffer.reserve(vertices.len(), device);
+    for vertex in vertices.iter().copied() {
+        vertex_buffer.push(vertex);
+    }
+    vertex_buffer.write_buffer(device, queue);
+
+    let mut index_buffer = BufferVec::new(BufferUsages::INDEX);
+    index_buffer.reserve(indices.len(), device);
+    for index in indices.iter().copied() {
+        index_buffer.push(index);
+    }
+    index_buffer.write_buffer(device, queue);
+
+    GpuMeshBuffers {
+        vertex_buffer,
+        index_buffer,
+    }
+}
+
+fn init_default_data(device: &wgpu::Device, queue: &wgpu::Queue) -> GpuMeshBuffers {
+    let mut rect_vertices: [Vertex; 4] = Default::default();
+    rect_vertices[0].position = Vec3::new(0.5, -0.5, 0.0);
+    rect_vertices[1].position = Vec3::new(0.5, 0.5, 0.0);
+    rect_vertices[2].position = Vec3::new(-0.5, -0.5, 0.0);
+    rect_vertices[3].position = Vec3::new(-0.5, 0.5, 0.0);
+
+    rect_vertices[0].color = Vec4::new(0.0, 0.0, 0.0, 1.0);
+    rect_vertices[1].color = Vec4::new(0.5, 0.5, 0.5, 1.0);
+    rect_vertices[2].color = Vec4::new(1.0, 0.0, 0.0, 1.0);
+    rect_vertices[3].color = Vec4::new(0.0, 1.0, 0.0, 1.0);
+
+    let mut rect_indices: [u32; 6] = Default::default();
+    rect_indices[0] = 0;
+    rect_indices[1] = 1;
+    rect_indices[2] = 2;
+
+    rect_indices[3] = 2;
+    rect_indices[4] = 1;
+    rect_indices[5] = 3;
+
+    upload_mesh(device, queue, &rect_indices, &rect_vertices)
+}
+
 fn render(
-    surface: Res<Surface>,
-    device: Res<Device>,
-    queue: Res<Queue>,
+    (surface, device, queue): (Res<Surface>, Res<Device>, Res<Queue>),
     mut main_texture_cache: Local<Option<(wgpu::Texture, wgpu::TextureView)>>,
     blit_pipeline: Res<BlitPipeline>,
     gradient_pipeline: Res<GradientPipeline>,
@@ -376,7 +452,7 @@ fn render(
     mut state: ResMut<EguiWinitState>,
     mut window_resized_events: EventReader<WindowResized>,
     compute_push_constants: Res<ComputePushConstants>,
-    mesh_pipeline: Res<MeshPipeline>,
+    (mesh_pipeline, rectangle_buffers): (Res<MeshPipeline>, Res<RectangleBuffers>),
 ) {
     let window = if let Ok(window) = windows.get_single() {
         winit_windows
@@ -463,7 +539,7 @@ fn render(
             occlusion_query_set: None,
             timestamp_writes: None,
         });
-        rpass.set_pipeline(&mesh_pipeline.pipeline);
+
         let draw_extent = frame.texture.size();
         rpass.set_viewport(
             0.0,
@@ -474,6 +550,21 @@ fn render(
             1.0,
         );
         rpass.set_scissor_rect(0, 0, draw_extent.width, draw_extent.height);
+
+        rpass.set_pipeline(&mesh_pipeline.pipeline);
+        //rpass.set_vertex_buffer(
+        //    0,
+        //    *rectangle_buffers
+        //        .0
+        //        .vertex_buffer
+        //        .buffer()
+        //        .unwrap()
+        //        .slice(..),
+        //);
+        //rpass.set_index_buffer(
+        //    *rectangle_buffers.0.index_buffer.buffer().unwrap().slice(..),
+        //    wgpu::IndexFormat::Uint32,
+        //);
         rpass.draw(0..3, 0..1);
     }
 
