@@ -12,19 +12,27 @@ opt-level = 3
 [dependencies]
 wgpu = "23.0.1"
 winit = "0.30.5"
-bevy = { version = "0.15.0", default-features = false, features = [
-    "bevy_asset",
-    "bevy_winit",
-    "bevy_render",
-    "multi_threaded",
-    "bevy_window",
-] }
 anyhow = "1.0.93"
 futures-lite = "2.5.0"
 egui = { git = "https://github.com/emilk/egui", rev = "10791cc43da0cb42f913fad7c3980c696cdd5418" }
 egui-wgpu = { git = "https://github.com/emilk/egui", rev = "10791cc43da0cb42f913fad7c3980c696cdd5418" }
 egui-winit = { git = "https://github.com/emilk/egui", rev = "10791cc43da0cb42f913fad7c3980c696cdd5418" }
 bytemuck = "1.20.0"
+
+
+[dependencies.bevy]
+# version = "0.15.0"
+git = "https://github.com/bevyengine/bevy"
+rev = "5adf831b42a5749aef5ebe91912323083e2ded00"
+default-features = false
+features = [
+    "bevy_asset",
+    "bevy_winit",
+    "bevy_render",
+    "multi_threaded",
+    "bevy_window",
+]
+
 
 [features]
 trace = []
