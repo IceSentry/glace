@@ -1,23 +1,13 @@
 use bevy::{
     app::{prelude::*, AppExit},
     ecs::prelude::*,
-    input::{
-        mouse::{MouseButtonInput, MouseWheel},
-        prelude::*,
-    },
     prelude::{Deref, DerefMut},
-    window::{
-        prelude::*, PrimaryWindow, WindowCloseRequested, WindowResized, WindowScaleFactorChanged,
-    },
+    window::{prelude::*, PrimaryWindow, WindowCloseRequested},
     winit::{RawWinitWindowEvent, WinitWindows},
 };
 use wgpu::{rwh::HasDisplayHandle, CommandEncoder, TextureView};
-use winit::dpi::PhysicalSize;
 
-//use self::custom_egui_winit::EguiWinitState;
 use crate::{setup_renderer, Device, Queue, Surface};
-
-//pub mod custom_egui_winit;
 
 #[derive(Resource, Deref, DerefMut)]
 pub struct EguiCtxRes(pub egui::Context);
