@@ -20,9 +20,8 @@ use egui_plugin::{
     EguiWinitState,
 };
 use wgpu::{
-    util::RenderEncoder, BindingResource, BufferUsages, CommandEncoderDescriptor, Features,
-    MemoryHints, PushConstantRange, ShaderStages, StoreOp, TextureFormat, TextureUsages,
-    TextureViewDescriptor,
+    BindingResource, BufferUsages, CommandEncoderDescriptor, Features, MemoryHints,
+    PushConstantRange, ShaderStages, StoreOp, TextureFormat, TextureUsages, TextureViewDescriptor,
 };
 use winit::dpi::PhysicalSize;
 
@@ -67,8 +66,8 @@ fn main() {
         .add_systems(Update, (quit_on_q, update_window_title, ui::ui))
         .add_systems(PostUpdate, (resize, render).chain())
         .insert_resource(ComputePushConstants {
-            data1: Vec4::new(1.0, 0.0, 0.0, 1.0),
-            data2: Vec4::new(0.0, 0.0, 1.0, 1.0),
+            data1: Vec4::new(1.0, 1.0, 0.0, 1.0),
+            data2: Vec4::new(0.0, 1.0, 0.0, 1.0),
         })
         .run();
 }
@@ -231,7 +230,7 @@ fn init_mesh_pipeline_gradient_pipeline(device: &wgpu::Device) -> MeshPipeline {
         vertex: wgpu::VertexState {
             module: &shader,
             entry_point: Some("vertex"),
-            buffers: &[],
+            buffers: &[Vertex::layout()],
             compilation_options: Default::default(),
         },
         fragment: Some(wgpu::FragmentState {
@@ -379,6 +378,23 @@ struct Vertex {
     color: Vec4,
 }
 
+impl Vertex {
+    fn layout<'a>() -> wgpu::VertexBufferLayout<'a> {
+        const ATTRIBUTESS: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
+            0 => Float32x3,
+            1 => Float32,
+            2 => Float32x3,
+            3 => Float32,
+            4 => Float32x4,
+        ];
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &ATTRIBUTESS,
+        }
+    }
+}
+
 struct GpuMeshBuffers {
     index_buffer: BufferVec<u32>,
     vertex_buffer: BufferVec<Vertex>,
@@ -394,7 +410,7 @@ fn upload_mesh(
     indices: &[u32],
     vertices: &[Vertex],
 ) -> GpuMeshBuffers {
-    let mut vertex_buffer = BufferVec::new(BufferUsages::STORAGE);
+    let mut vertex_buffer = BufferVec::new(BufferUsages::STORAGE | BufferUsages::VERTEX);
     vertex_buffer.reserve(vertices.len(), device);
     for vertex in vertices.iter().copied() {
         vertex_buffer.push(vertex);
@@ -552,19 +568,20 @@ fn render(
         rpass.set_scissor_rect(0, 0, draw_extent.width, draw_extent.height);
 
         rpass.set_pipeline(&mesh_pipeline.pipeline);
-        //rpass.set_vertex_buffer(
-        //    0,
-        //    *rectangle_buffers
-        //        .0
-        //        .vertex_buffer
-        //        .buffer()
-        //        .unwrap()
-        //        .slice(..),
-        //);
-        //rpass.set_index_buffer(
-        //    *rectangle_buffers.0.index_buffer.buffer().unwrap().slice(..),
-        //    wgpu::IndexFormat::Uint32,
-        //);
+        rpass.set_vertex_buffer(
+            0,
+            *rectangle_buffers
+                .0
+                .vertex_buffer
+                .buffer()
+                .unwrap()
+                .slice(..),
+        );
+        rpass.set_index_buffer(
+            *rectangle_buffers.0.index_buffer.buffer().unwrap().slice(..),
+            wgpu::IndexFormat::Uint32,
+        );
+        rpass.draw_indexed(0..rectangle_buffers.0.index_buffer.len() as u32, 0, 0..1);
         rpass.draw(0..3, 0..1);
     }
 
