@@ -13,10 +13,10 @@ struct VertexOutput {
     @location(0) color: vec4<f32>,
 };
 
-//struct PushConstants {
-//    world_matrix: mat4x4<f32>,
-//};
-//var<push_constant> constants: PushConstants;
+struct PushConstants {
+    world_matrix: mat4x4<f32>,
+};
+var<push_constant> constants: PushConstants;
 
 @vertex
 fn vertex(in_vertex: Vertex) -> VertexOutput {

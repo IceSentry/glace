@@ -20,8 +20,9 @@ use egui_plugin::{
     EguiWinitState,
 };
 use wgpu::{
-    BindingResource, BufferUsages, CommandEncoderDescriptor, Features, MemoryHints,
-    PushConstantRange, ShaderStages, StoreOp, TextureFormat, TextureUsages, TextureViewDescriptor,
+    util::RenderEncoder, BindingResource, BufferUsages, CommandEncoderDescriptor, Features,
+    MemoryHints, PushConstantRange, ShaderStages, StoreOp, TextureFormat, TextureUsages,
+    TextureViewDescriptor,
 };
 use winit::dpi::PhysicalSize;
 
@@ -221,7 +222,10 @@ fn init_mesh_pipeline_gradient_pipeline(device: &wgpu::Device) -> MeshPipeline {
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
         bind_group_layouts: &[],
-        push_constant_ranges: &[],
+        push_constant_ranges: &[PushConstantRange {
+            stages: ShaderStages::VERTEX_FRAGMENT,
+            range: 0..std::mem::size_of::<GpuDrawPushConstants>() as u32,
+        }],
     });
     // TODO consider making a builder thing
     let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -400,6 +404,8 @@ struct GpuMeshBuffers {
     vertex_buffer: BufferVec<Vertex>,
 }
 
+#[derive(Resource, bytemuck::NoUninit, Clone, Copy)]
+#[repr(C)]
 struct GpuDrawPushConstants {
     world_matrix: Mat4,
 }
@@ -528,7 +534,6 @@ fn render(
         compute_pass.set_pipeline(&gradient_pipeline.pipeline);
         compute_pass.set_bind_group(0, &gradient_bind_group, &[]);
         compute_pass.set_push_constants(0, bytemuck::bytes_of(&*compute_push_constants));
-        // TODO extract extent
         compute_pass.dispatch_workgroups(
             (draw_extent.width as f32 / 16.0).ceil() as u32,
             (draw_extent.height as f32 / 16.0).ceil() as u32,
@@ -567,7 +572,16 @@ fn render(
         );
         rpass.set_scissor_rect(0, 0, draw_extent.width, draw_extent.height);
 
+        let push_constant = GpuDrawPushConstants {
+            world_matrix: Mat4::IDENTITY,
+        };
+
         rpass.set_pipeline(&mesh_pipeline.pipeline);
+        rpass.set_push_constants(
+            ShaderStages::VERTEX_FRAGMENT,
+            0,
+            bytemuck::bytes_of(&push_constant),
+        );
         rpass.set_vertex_buffer(
             0,
             *rectangle_buffers
