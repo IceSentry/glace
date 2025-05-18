@@ -20,8 +20,9 @@ use egui_plugin::{
     EguiWinitState,
 };
 use wgpu::{
+    util::{TextureBlitter, TextureBlitterBuilder},
     BindingResource, BufferUsages, CommandEncoderDescriptor, Features, MemoryHints,
-    PushConstantRange, ShaderStages, StoreOp, TextureFormat, TextureUsages, TextureViewDescriptor,
+    PushConstantRange, ShaderStages, TextureFormat, TextureUsages, TextureViewDescriptor,
 };
 use winit::dpi::PhysicalSize;
 
@@ -108,12 +109,8 @@ struct SurfaceConfiguration(wgpu::SurfaceConfiguration);
 #[derive(Resource, Deref, DerefMut)]
 struct Surface(wgpu::Surface<'static>);
 
-#[derive(Resource)]
-struct BlitPipeline {
-    pipeline: wgpu::RenderPipeline,
-    layout: wgpu::BindGroupLayout,
-    sampler: wgpu::Sampler,
-}
+#[derive(Resource, Deref, DerefMut)]
+struct SwapchainTextureBlitter(TextureBlitter);
 
 #[derive(Resource)]
 struct GradientPipeline {
@@ -198,8 +195,9 @@ fn setup_renderer(
     commands.insert_resource(gradient_pipeline);
 
     let swapchain_format = surface.get_capabilities(&adapter).formats[0];
-    let blit_pipeline = init_blit_pipeline(&device, swapchain_format);
-    commands.insert_resource(blit_pipeline);
+    commands.insert_resource(SwapchainTextureBlitter(
+        TextureBlitterBuilder::new(&device, swapchain_format).build(),
+    ));
 
     let rectangle_buffers = init_default_data(&device, &queue);
     commands.insert_resource(RectangleBuffers(rectangle_buffers));
@@ -298,56 +296,6 @@ fn init_compute_gradient_pipeline(device: &wgpu::Device) -> GradientPipeline {
     GradientPipeline {
         pipeline: compute_pipeline,
         layout: bind_group_layout,
-    }
-}
-
-fn init_blit_pipeline(device: &wgpu::Device, target_format: TextureFormat) -> BlitPipeline {
-    let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("blit"),
-        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("blit.wgsl"))),
-    });
-
-    let blit_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("blit"),
-        layout: None,
-        vertex: wgpu::VertexState {
-            module: &blit_shader,
-            entry_point: Some("vertex"),
-            compilation_options: Default::default(),
-            buffers: &[],
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &blit_shader,
-            entry_point: Some("fragment"),
-            compilation_options: Default::default(),
-            targets: &[Some(target_format.into())],
-        }),
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            ..Default::default()
-        },
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState::default(),
-        multiview: None,
-        cache: None,
-    });
-
-    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        label: Some("blit_sampler"),
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        mipmap_filter: wgpu::FilterMode::Nearest,
-        ..Default::default()
-    });
-    let blit_bind_group_layout = blit_pipeline.get_bind_group_layout(0);
-
-    BlitPipeline {
-        pipeline: blit_pipeline,
-        sampler,
-        layout: blit_bind_group_layout,
     }
 }
 
@@ -467,15 +415,17 @@ fn init_default_data(device: &wgpu::Device, queue: &wgpu::Queue) -> GpuMeshBuffe
 fn render(
     (surface, device, queue): (Res<Surface>, Res<Device>, Res<Queue>),
     mut main_texture_cache: Local<Option<(wgpu::Texture, wgpu::TextureView)>>,
-    blit_pipeline: Res<BlitPipeline>,
+    swapchain_blitter: Res<SwapchainTextureBlitter>,
     gradient_pipeline: Res<GradientPipeline>,
     windows: Query<Entity, With<Window>>,
     winit_windows: NonSend<WinitWindows>,
-    screen_descriptor: Res<EguiScreenDesciptorRes>,
-    mut egui_renderer: NonSendMut<EguiRenderer>,
-    mut paint_jobs: ResMut<EguiPaintJobs>,
-    egui_ctx: Res<EguiCtxRes>,
-    mut state: ResMut<EguiWinitState>,
+    (egui_screen_descriptor, mut egui_renderer, mut paint_jobs, egui_ctx, mut egui_state): (
+        Res<EguiScreenDesciptorRes>,
+        NonSendMut<EguiRenderer>,
+        ResMut<EguiPaintJobs>,
+        Res<EguiCtxRes>,
+        ResMut<EguiWinitState>,
+    ),
     mut window_resized_events: EventReader<WindowResized>,
     compute_push_constants: Res<ComputePushConstants>,
     (mesh_pipeline, rectangle_buffers): (Res<MeshPipeline>, Res<RectangleBuffers>),
@@ -487,6 +437,7 @@ fn render(
     } else {
         return;
     };
+
     let frame = surface
         .get_current_texture()
         .expect("Failed to get texture");
@@ -608,33 +559,7 @@ fn render(
         #[cfg(feature = "trace")]
         let _span = info_span!("blit").entered();
 
-        // TODO cache bind group
-        let blit_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Blit Bind Group"),
-            layout: &blit_pipeline.layout,
-            entries: &BindGroupEntries::sequential((
-                BindingResource::TextureView(main_texture_view),
-                BindingResource::Sampler(&blit_pipeline.sampler),
-            )),
-        });
-        let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Blit Pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        });
-
-        rpass.set_pipeline(&blit_pipeline.pipeline);
-        rpass.set_bind_group(0, &blit_bind_group, &[]);
-        rpass.draw(0..3, 0..1);
+        swapchain_blitter.copy(&device, &mut command_encoder, main_texture_view, &view);
     }
 
     // Render egui
@@ -643,8 +568,8 @@ fn render(
         &mut egui_renderer,
         &mut paint_jobs,
         &egui_ctx,
-        &mut state,
-        &screen_descriptor,
+        &mut egui_state,
+        &egui_screen_descriptor,
         &device,
         &queue,
         &mut command_encoder,
