@@ -20,9 +20,8 @@ use egui_plugin::{
     EguiWinitState,
 };
 use wgpu::{
-    util::RenderEncoder, BindingResource, BufferUsages, CommandEncoderDescriptor, Features,
-    MemoryHints, PushConstantRange, ShaderStages, StoreOp, TextureFormat, TextureUsages,
-    TextureViewDescriptor,
+    BindingResource, BufferUsages, CommandEncoderDescriptor, Features, MemoryHints,
+    PushConstantRange, ShaderStages, StoreOp, TextureFormat, TextureUsages, TextureViewDescriptor,
 };
 use winit::dpi::PhysicalSize;
 
@@ -58,7 +57,7 @@ fn main() {
             },
             AccessibilityPlugin,
             WinitPlugin::<WakeUp>::default(),
-            FrameTimeDiagnosticsPlugin,
+            FrameTimeDiagnosticsPlugin::default(),
             InputPlugin,
             LogPlugin::default(),
             EguiPlugin,
@@ -75,7 +74,7 @@ fn main() {
 
 fn quit_on_q(input: Res<ButtonInput<KeyCode>>, mut exit_event: EventWriter<AppExit>) {
     if input.just_pressed(KeyCode::KeyQ) {
-        exit_event.send_default();
+        exit_event.write_default();
     }
 }
 
@@ -144,7 +143,9 @@ fn setup_renderer(
 ) {
     info!("Start renderer setup");
 
-    let (window_entity, window, raw_handle_wrapper) = primary_window.single();
+    let (window_entity, window, raw_handle_wrapper) = primary_window
+        .single()
+        .expect("Failed to get primary window during setup");
     let winit_window = winit_windows
         .get_window(window_entity)
         .expect("Failed to get winit window");
@@ -476,7 +477,7 @@ fn render(
     compute_push_constants: Res<ComputePushConstants>,
     (mesh_pipeline, rectangle_buffers): (Res<MeshPipeline>, Res<RectangleBuffers>),
 ) {
-    let window = if let Ok(window) = windows.get_single() {
+    let window = if let Ok(window) = windows.single() {
         winit_windows
             .get_window(window)
             .expect("Failed to get primary window")
@@ -584,7 +585,7 @@ fn render(
         );
         rpass.set_vertex_buffer(
             0,
-            *rectangle_buffers
+            rectangle_buffers
                 .0
                 .vertex_buffer
                 .buffer()
@@ -592,7 +593,7 @@ fn render(
                 .slice(..),
         );
         rpass.set_index_buffer(
-            *rectangle_buffers.0.index_buffer.buffer().unwrap().slice(..),
+            rectangle_buffers.0.index_buffer.buffer().unwrap().slice(..),
             wgpu::IndexFormat::Uint32,
         );
         rpass.draw_indexed(0..rectangle_buffers.0.index_buffer.len() as u32, 0, 0..1);

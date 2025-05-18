@@ -6,7 +6,7 @@ use bevy::render::render_resource::{
     encase::internal::{WriteInto, Writer},
     Buffer, ShaderType,
 };
-use wgpu::{BindingResource, BufferAddress, BufferUsages, Device, Queue};
+use wgpu::{BindingResource, BufferAddress, BufferBinding, BufferUsages, Device, Queue};
 
 /// Like [`RawBufferVec`], but doesn't require that the data type `T` be
 /// [`NoUninit`].
@@ -25,7 +25,7 @@ where
     T: ShaderType + WriteInto,
 {
     data: Vec<u8>,
-    buffer: Option<Buffer>,
+    buffer: Option<wgpu::Buffer>,
     capacity: usize,
     buffer_usage: BufferUsages,
     label: Option<String>,
@@ -52,16 +52,14 @@ where
 
     /// Returns a handle to the buffer, if the data has been uploaded.
     #[inline]
-    pub fn buffer(&self) -> Option<&Buffer> {
+    pub fn buffer(&self) -> Option<&wgpu::Buffer> {
         self.buffer.as_ref()
     }
 
     /// Returns the binding for the buffer if the data has been uploaded.
     #[inline]
-    pub fn binding(&self) -> Option<BindingResource> {
-        Some(BindingResource::Buffer(
-            self.buffer()?.as_entire_buffer_binding(),
-        ))
+    pub fn binding(&self) -> Option<wgpu::BufferBinding> {
+        Some(self.buffer()?.as_entire_buffer_binding())
     }
 
     /// Returns the amount of space that the GPU will use before reallocating.
@@ -89,7 +87,7 @@ where
 
         // TODO: Consider using unsafe code to push uninitialized, to prevent
         // the zeroing. It shows up in profiles.
-        self.data.extend(iter::repeat(0).take(element_size));
+        self.data.extend(std::iter::repeat_n(0, element_size));
 
         // Take a slice of the new data for `write_into` to use. This is
         // important: it hoists the bounds check up here so that the compiler
@@ -144,7 +142,7 @@ where
             usage: BufferUsages::COPY_DST | self.buffer_usage,
             mapped_at_creation: false,
         });
-        self.buffer = Some(Buffer::from(wgpu_buffer));
+        self.buffer = Some(wgpu_buffer);
         self.label_changed = false;
     }
 

@@ -64,7 +64,7 @@ fn setup(
     //        memory.clone_from(&mem);
     //    })
     //}
-    if let Ok(window) = windows_entity.get_single() {
+    if let Ok(window) = windows_entity.single() {
         let winit_window = winit_windows
             .get_window(window)
             .expect("winit window not found");
@@ -110,7 +110,7 @@ fn begin_frame(
     windows: Query<Entity, With<Window>>,
     winit_windows: NonSendMut<WinitWindows>,
 ) {
-    if let Ok(window) = windows.get_single() {
+    if let Ok(window) = windows.single() {
         let winit_window = winit_windows
             .get_window(window)
             .expect("winit window not found");
@@ -181,7 +181,7 @@ fn handle_winit_events(
     winit_windows: NonSend<WinitWindows>,
     mut egui_winit_state: ResMut<EguiWinitState>,
 ) {
-    let window = if let Ok(window) = windows.get_single() {
+    let window = if let Ok(window) = windows.single() {
         winit_windows
             .get_window(window)
             .expect("Failed to get primary window")
