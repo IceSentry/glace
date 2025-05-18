@@ -357,6 +357,7 @@ fn resize(
     device: Res<Device>,
     mut events: EventReader<WindowResized>,
     windows: Query<&Window>,
+    mut egui_screen_descriptor: ResMut<EguiScreenDesciptorRes>,
 ) {
     for event in events.read() {
         let window = windows.get(event.window).expect("window not found");
@@ -370,6 +371,8 @@ fn resize(
             surface_config.height = new_size.height;
 
             surface.configure(&device, &surface_config);
+
+            egui_screen_descriptor.0.size_in_pixels = [new_size.width, new_size.height];
         }
     }
 }
