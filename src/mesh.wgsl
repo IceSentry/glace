@@ -23,7 +23,7 @@ fn vertex(in_vertex: Vertex) -> VertexOutput {
     let x = f32(i32(in_vertex.vertex_index) - 1);
     let y = f32(i32(in_vertex.vertex_index & 1u) * 2 - 1);
     var out: VertexOutput;
-    out.clip_position = vec4(in_vertex.position.xy, 0.0, 1.0);
+    out.clip_position = constants.world_matrix * vec4(in_vertex.position.xy, 0.0, 1.0);
     out.color = in_vertex.color;
     return out;
 }

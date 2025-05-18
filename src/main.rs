@@ -19,6 +19,7 @@ use egui_plugin::{
     egui_render_pass, EguiCtxRes, EguiPaintJobs, EguiPlugin, EguiRenderer, EguiScreenDesciptorRes,
     EguiWinitState,
 };
+use gltf_loader::load_gltf;
 use wgpu::{
     util::{TextureBlitter, TextureBlitterBuilder},
     BindingResource, BufferUsages, CommandEncoderDescriptor, Features, MemoryHints,
@@ -28,6 +29,7 @@ use winit::dpi::PhysicalSize;
 
 mod buffer_vec;
 mod egui_plugin;
+mod gltf_loader;
 mod ui;
 
 use buffer_vec::BufferVec;
@@ -63,7 +65,7 @@ fn main() {
             LogPlugin::default(),
             EguiPlugin,
         ))
-        .add_systems(Startup, setup_renderer)
+        .add_systems(Startup, (setup_renderer, load_assets).chain())
         .add_systems(Update, (quit_on_q, update_window_title, ui::ui))
         .add_systems(PostUpdate, (resize, render).chain())
         .insert_resource(ComputePushConstants {
@@ -129,9 +131,6 @@ struct ComputePushConstants {
     data1: Vec4,
     data2: Vec4,
 }
-
-#[derive(Resource)]
-struct RectangleBuffers(GpuMeshBuffers);
 
 fn setup_renderer(
     mut commands: Commands,
@@ -199,9 +198,6 @@ fn setup_renderer(
         TextureBlitterBuilder::new(&device, swapchain_format).build(),
     ));
 
-    let rectangle_buffers = init_default_data(&device, &queue);
-    commands.insert_resource(RectangleBuffers(rectangle_buffers));
-
     commands.insert_resource(Device(device));
     commands.insert_resource(Queue(queue));
     commands.insert_resource(SurfaceConfiguration(config));
@@ -211,6 +207,20 @@ fn setup_renderer(
     winit_window.set_visible(true);
 
     info!("Renderer setup done!");
+}
+
+#[derive(Component)]
+struct GpuMesh(GpuMeshBuffers);
+
+fn load_assets(mut commands: Commands, device: Res<Device>, queue: Res<Queue>) {
+    let meshes = load_gltf("assets/models/gltf/basicmesh.glb", true);
+    for mesh in meshes {
+        if mesh.name == Some(String::from("Suzanne")) {
+            println!("uploading mesh: {:?}", mesh.name);
+            let gpu_buffers = upload_mesh(&device, &queue, &mesh.indices, &mesh.vertices);
+            commands.spawn(GpuMesh(gpu_buffers));
+        }
+    }
 }
 
 fn init_mesh_pipeline_gradient_pipeline(device: &wgpu::Device) -> MeshPipeline {
@@ -388,30 +398,6 @@ fn upload_mesh(
     }
 }
 
-fn init_default_data(device: &wgpu::Device, queue: &wgpu::Queue) -> GpuMeshBuffers {
-    let mut rect_vertices: [Vertex; 4] = Default::default();
-    rect_vertices[0].position = Vec3::new(0.5, -0.5, 0.0);
-    rect_vertices[1].position = Vec3::new(0.5, 0.5, 0.0);
-    rect_vertices[2].position = Vec3::new(-0.5, -0.5, 0.0);
-    rect_vertices[3].position = Vec3::new(-0.5, 0.5, 0.0);
-
-    rect_vertices[0].color = Vec4::new(0.0, 0.0, 0.0, 1.0);
-    rect_vertices[1].color = Vec4::new(0.5, 0.5, 0.5, 1.0);
-    rect_vertices[2].color = Vec4::new(1.0, 0.0, 0.0, 1.0);
-    rect_vertices[3].color = Vec4::new(0.0, 1.0, 0.0, 1.0);
-
-    let mut rect_indices: [u32; 6] = Default::default();
-    rect_indices[0] = 0;
-    rect_indices[1] = 1;
-    rect_indices[2] = 2;
-
-    rect_indices[3] = 2;
-    rect_indices[4] = 1;
-    rect_indices[5] = 3;
-
-    upload_mesh(device, queue, &rect_indices, &rect_vertices)
-}
-
 fn render(
     (surface, device, queue): (Res<Surface>, Res<Device>, Res<Queue>),
     mut main_texture_cache: Local<Option<(wgpu::Texture, wgpu::TextureView)>>,
@@ -428,7 +414,7 @@ fn render(
     ),
     mut window_resized_events: EventReader<WindowResized>,
     compute_push_constants: Res<ComputePushConstants>,
-    (mesh_pipeline, rectangle_buffers): (Res<MeshPipeline>, Res<RectangleBuffers>),
+    (mesh_pipeline, meshes): (Res<MeshPipeline>, Query<&GpuMesh>),
 ) {
     let window = if let Ok(window) = windows.single() {
         winit_windows
@@ -527,31 +513,31 @@ fn render(
         );
         rpass.set_scissor_rect(0, 0, draw_extent.width, draw_extent.height);
 
-        let push_constant = GpuDrawPushConstants {
-            world_matrix: Mat4::IDENTITY,
-        };
-
         rpass.set_pipeline(&mesh_pipeline.pipeline);
+
+        // TODO create a camera entity
+        let view = Mat4::from_translation(Vec3::new(0.0, 0.0, -5.0));
+        let projection = Mat4::perspective_infinite_reverse_rh(
+            70.0,
+            draw_extent.width as f32 / draw_extent.height as f32,
+            0.1,
+        );
+        let world_matrix = projection * view;
+        let push_constant = GpuDrawPushConstants { world_matrix };
         rpass.set_push_constants(
             ShaderStages::VERTEX_FRAGMENT,
             0,
             bytemuck::bytes_of(&push_constant),
         );
-        rpass.set_vertex_buffer(
-            0,
-            rectangle_buffers
-                .0
-                .vertex_buffer
-                .buffer()
-                .unwrap()
-                .slice(..),
-        );
-        rpass.set_index_buffer(
-            rectangle_buffers.0.index_buffer.buffer().unwrap().slice(..),
-            wgpu::IndexFormat::Uint32,
-        );
-        rpass.draw_indexed(0..rectangle_buffers.0.index_buffer.len() as u32, 0, 0..1);
-        rpass.draw(0..3, 0..1);
+
+        for mesh in meshes {
+            rpass.set_vertex_buffer(0, mesh.0.vertex_buffer.buffer().unwrap().slice(..));
+            rpass.set_index_buffer(
+                mesh.0.index_buffer.buffer().unwrap().slice(..),
+                wgpu::IndexFormat::Uint32,
+            );
+            rpass.draw_indexed(0..mesh.0.index_buffer.len() as u32, 0, 0..1);
+        }
     }
 
     // Blit main texture to swapchain
