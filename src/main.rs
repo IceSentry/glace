@@ -8,10 +8,9 @@ use bevy::{
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     input::InputPlugin,
     log::LogPlugin,
-    math::VectorSpace,
     prelude::*,
     render::render_resource::{
-        binding_types::texture_storage_2d, BindGroupEntries, BindGroupLayoutEntries, ShaderType,
+        binding_types::texture_storage_2d, BindGroupEntries, BindGroupLayoutEntries,
     },
     window::{PresentMode, PrimaryWindow, RawHandleWrapper, WindowResized, WindowResolution},
     winit::{WakeUp, WinitPlugin, WinitWindows},
@@ -21,19 +20,20 @@ use egui_plugin::{
     EguiWinitState,
 };
 use gltf_loader::load_gltf;
+use mesh::{upload_mesh, GpuMeshBuffers, MeshPlugin, Vertex};
 use wgpu::{
     util::{TextureBlitter, TextureBlitterBuilder},
-    BindingResource, BufferUsages, CommandEncoderDescriptor, CompareFunction, DepthStencilState,
-    Features, LoadOp, MemoryHints, Operations, PushConstantRange, RenderPassDepthStencilAttachment,
+    BindingResource, CommandEncoderDescriptor, CompareFunction, DepthStencilState, Features,
+    LoadOp, MemoryHints, Operations, PushConstantRange, RenderPassDepthStencilAttachment,
     ShaderStages, StoreOp, TextureFormat, TextureUsages, TextureViewDescriptor,
 };
 
 mod buffer_vec;
 mod egui_plugin;
 mod gltf_loader;
+mod mesh;
 mod ui;
 
-use buffer_vec::BufferVec;
 use winit::dpi::PhysicalSize;
 
 const MAIN_TEXTURE_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
@@ -66,6 +66,7 @@ fn main() {
             InputPlugin,
             LogPlugin::default(),
             EguiPlugin,
+            MeshPlugin,
         ))
         .add_systems(Startup, (setup_renderer, load_assets).chain())
         .add_systems(Update, (quit_on_q, update_window_title, ui::ui))
@@ -219,7 +220,11 @@ fn load_assets(mut commands: Commands, device: Res<Device>, queue: Res<Queue>) {
     for mesh in meshes {
         if mesh.name == Some(String::from("Suzanne")) {
             println!("uploading mesh: {:?}", mesh.name);
-            let gpu_buffers = upload_mesh(&device, &queue, &mesh.indices, &mesh.vertices);
+            let mesh = crate::mesh::Mesh {
+                vertices: mesh.vertices,
+                indices: mesh.indices,
+            };
+            let gpu_buffers = upload_mesh(&device, &queue, &mesh);
             commands.spawn(GpuMesh(gpu_buffers));
         }
     }
@@ -343,67 +348,10 @@ fn resize(
     }
 }
 
-#[derive(Default, Clone, Copy, ShaderType)]
-struct Vertex {
-    position: Vec3,
-    uv_x: f32,
-    normal: Vec3,
-    uv_y: f32,
-    color: Vec4,
-}
-
-impl Vertex {
-    fn layout<'a>() -> wgpu::VertexBufferLayout<'a> {
-        const ATTRIBUTESS: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
-            0 => Float32x3,
-            1 => Float32,
-            2 => Float32x3,
-            3 => Float32,
-            4 => Float32x4,
-        ];
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &ATTRIBUTESS,
-        }
-    }
-}
-
-struct GpuMeshBuffers {
-    index_buffer: BufferVec<u32>,
-    vertex_buffer: BufferVec<Vertex>,
-}
-
 #[derive(Resource, bytemuck::NoUninit, Clone, Copy)]
 #[repr(C)]
 struct GpuDrawPushConstants {
     world_matrix: Mat4,
-}
-
-fn upload_mesh(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    indices: &[u32],
-    vertices: &[Vertex],
-) -> GpuMeshBuffers {
-    let mut vertex_buffer = BufferVec::new(BufferUsages::STORAGE | BufferUsages::VERTEX);
-    vertex_buffer.reserve(vertices.len(), device);
-    for vertex in vertices.iter().copied() {
-        vertex_buffer.push(vertex);
-    }
-    vertex_buffer.write_buffer(device, queue);
-
-    let mut index_buffer = BufferVec::new(BufferUsages::INDEX);
-    index_buffer.reserve(indices.len(), device);
-    for index in indices.iter().copied() {
-        index_buffer.push(index);
-    }
-    index_buffer.write_buffer(device, queue);
-
-    GpuMeshBuffers {
-        vertex_buffer,
-        index_buffer,
-    }
 }
 
 fn render(
