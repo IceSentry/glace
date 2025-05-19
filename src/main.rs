@@ -8,6 +8,7 @@ use bevy::{
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     input::InputPlugin,
     log::LogPlugin,
+    math::VectorSpace,
     prelude::*,
     render::render_resource::{
         binding_types::texture_storage_2d, BindGroupEntries, BindGroupLayoutEntries, ShaderType,
@@ -22,10 +23,10 @@ use egui_plugin::{
 use gltf_loader::load_gltf;
 use wgpu::{
     util::{TextureBlitter, TextureBlitterBuilder},
-    BindingResource, BufferUsages, CommandEncoderDescriptor, Features, MemoryHints,
-    PushConstantRange, ShaderStages, TextureFormat, TextureUsages, TextureViewDescriptor,
+    BindingResource, BufferUsages, CommandEncoderDescriptor, CompareFunction, DepthStencilState,
+    Features, LoadOp, MemoryHints, Operations, PushConstantRange, RenderPassDepthStencilAttachment,
+    ShaderStages, StoreOp, TextureFormat, TextureUsages, TextureViewDescriptor,
 };
-use winit::dpi::PhysicalSize;
 
 mod buffer_vec;
 mod egui_plugin;
@@ -33,6 +34,7 @@ mod gltf_loader;
 mod ui;
 
 use buffer_vec::BufferVec;
+use winit::dpi::PhysicalSize;
 
 const MAIN_TEXTURE_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
 
@@ -187,7 +189,7 @@ fn setup_renderer(
     };
     surface.configure(&device, &config);
 
-    let mesh_pipeline = init_mesh_pipeline_gradient_pipeline(&device);
+    let mesh_pipeline = init_mesh_pipeline(&device);
     commands.insert_resource(mesh_pipeline);
 
     let gradient_pipeline = init_compute_gradient_pipeline(&device);
@@ -223,7 +225,7 @@ fn load_assets(mut commands: Commands, device: Res<Device>, queue: Res<Queue>) {
     }
 }
 
-fn init_mesh_pipeline_gradient_pipeline(device: &wgpu::Device) -> MeshPipeline {
+fn init_mesh_pipeline(device: &wgpu::Device) -> MeshPipeline {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("mesh.wgsl"))),
@@ -258,12 +260,18 @@ fn init_mesh_pipeline_gradient_pipeline(device: &wgpu::Device) -> MeshPipeline {
         }),
         primitive: wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,
-            front_face: wgpu::FrontFace::Cw,
-            cull_mode: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: Some(wgpu::Face::Back),
             polygon_mode: wgpu::PolygonMode::Fill,
             ..default()
         },
-        depth_stencil: None,
+        depth_stencil: Some(DepthStencilState {
+            format: TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            depth_compare: CompareFunction::GreaterEqual,
+            stencil: Default::default(),
+            bias: Default::default(),
+        }),
         multisample: wgpu::MultisampleState::default(),
         multiview: None,
         cache: None,
@@ -401,6 +409,7 @@ fn upload_mesh(
 fn render(
     (surface, device, queue): (Res<Surface>, Res<Device>, Res<Queue>),
     mut main_texture_cache: Local<Option<(wgpu::Texture, wgpu::TextureView)>>,
+    mut depth_texture_cache: Local<Option<(wgpu::Texture, wgpu::TextureView)>>,
     swapchain_blitter: Res<SwapchainTextureBlitter>,
     gradient_pipeline: Res<GradientPipeline>,
     windows: Query<Entity, With<Window>>,
@@ -415,6 +424,8 @@ fn render(
     mut window_resized_events: EventReader<WindowResized>,
     compute_push_constants: Res<ComputePushConstants>,
     (mesh_pipeline, meshes): (Res<MeshPipeline>, Query<&GpuMesh>),
+    time: Res<Time>,
+    mut camera_transform: Local<Option<Transform>>,
 ) {
     let window = if let Ok(window) = windows.single() {
         winit_windows
@@ -429,7 +440,10 @@ fn render(
         .expect("Failed to get texture");
     let view = frame.texture.create_view(&TextureViewDescriptor::default());
     // TODO better handle resize, maybe just use bevy's TextureCache
-    if main_texture_cache.is_none() || window_resized_events.read().count() > 0 {
+    if main_texture_cache.is_none()
+        || window_resized_events.read().count() > 0
+        || depth_texture_cache.is_none()
+    {
         let main_texture_format = MAIN_TEXTURE_FORMAT;
         let main_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Main Texture"),
@@ -447,11 +461,30 @@ fn render(
         });
         let main_texture_view = main_texture.create_view(&TextureViewDescriptor::default());
         *main_texture_cache = Some((main_texture, main_texture_view));
+
+        let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Depth Texture"),
+            size: frame.texture.size(),
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: TextureFormat::Depth32Float,
+            usage: TextureUsages::COPY_SRC
+                | TextureUsages::COPY_DST
+                | TextureUsages::RENDER_ATTACHMENT
+                | TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let depth_texture_view = depth_texture.create_view(&TextureViewDescriptor::default());
+        *depth_texture_cache = Some((depth_texture, depth_texture_view));
     }
     let Some((_main_texture, main_texture_view)) = main_texture_cache.as_ref() else {
         panic!("Failed to get main texture");
     };
 
+    let Some((_depth_texture, depth_texture_view)) = depth_texture_cache.as_ref() else {
+        panic!("Failed to get depth texture");
+    };
     let mut command_encoder = device.create_command_encoder(&CommandEncoderDescriptor::default());
 
     let draw_extent = frame.texture.size();
@@ -497,7 +530,14 @@ fn render(
                     store: wgpu::StoreOp::Store,
                 },
             })],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                view: depth_texture_view,
+                depth_ops: Some(Operations {
+                    load: LoadOp::Clear(0.0),
+                    store: StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
             occlusion_query_set: None,
             timestamp_writes: None,
         });
@@ -516,7 +556,13 @@ fn render(
         rpass.set_pipeline(&mesh_pipeline.pipeline);
 
         // TODO create a camera entity
-        let view = Mat4::from_translation(Vec3::new(0.0, 0.0, -5.0));
+        // let view = Mat4::from_translation(Vec3::new(0.0, 0.0, -5.0));
+        if camera_transform.is_none() {
+            let transform = Transform::from_translation(Vec3::new(0.0, 0.0, -5.0));
+            *camera_transform = Some(transform);
+        }
+        let view = camera_transform.unwrap().compute_matrix();
+
         let projection = Mat4::perspective_infinite_reverse_rh(
             70.0,
             draw_extent.width as f32 / draw_extent.height as f32,
