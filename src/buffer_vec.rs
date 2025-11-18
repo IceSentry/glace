@@ -58,7 +58,7 @@ where
 
     /// Returns the binding for the buffer if the data has been uploaded.
     #[inline]
-    pub fn binding(&self) -> Option<wgpu::BufferBinding> {
+    pub fn binding(&'_ self) -> Option<wgpu::BufferBinding<'_>> {
         Some(self.buffer()?.as_entire_buffer_binding())
     }
 

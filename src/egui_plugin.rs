@@ -1,9 +1,9 @@
 use bevy::{
     app::{prelude::*, AppExit},
-    ecs::prelude::*,
+    ecs::{prelude::*, system::NonSendMarker},
     prelude::{Deref, DerefMut},
     window::{prelude::*, PrimaryWindow, WindowCloseRequested},
-    winit::{RawWinitWindowEvent, WinitWindows},
+    winit::{RawWinitWindowEvent, WINIT_WINDOWS},
 };
 use wgpu::{rwh::HasDisplayHandle, CommandEncoder, TextureView};
 
@@ -36,8 +36,8 @@ impl Plugin for EguiPlugin {
 }
 
 fn on_exit(
-    exit: EventReader<AppExit>,
-    window_close: EventReader<WindowCloseRequested>,
+    exit: MessageReader<AppExit>,
+    window_close: MessageReader<WindowCloseRequested>,
     _egui_ctx: Res<EguiCtxRes>,
 ) {
     if !exit.is_empty() || !window_close.is_empty() {
@@ -55,7 +55,7 @@ fn on_exit(
 fn setup(
     mut commands: Commands,
     windows_entity: Query<Entity, With<PrimaryWindow>>,
-    winit_windows: NonSend<WinitWindows>,
+    _marker: NonSendMarker,
 ) {
     let ctx = egui::Context::default();
     //if let Ok(mem) = std::fs::read_to_string("egui.ron") {
@@ -65,27 +65,29 @@ fn setup(
     //    })
     //}
     if let Ok(window) = windows_entity.single() {
-        let winit_window = winit_windows
-            .get_window(window)
-            .expect("winit window not found");
-        commands.insert_resource(EguiWinitState(egui_winit::State::new(
-            ctx.clone(),
-            egui::ViewportId::ROOT,
-            &winit_window
-                .display_handle()
-                .expect("Failed to get display handle"),
-            None,
-            None,
-            None,
-        )));
-        let screen_descriptor = egui_wgpu::ScreenDescriptor {
-            size_in_pixels: [
-                winit_window.inner_size().width,
-                winit_window.inner_size().height,
-            ],
-            pixels_per_point: winit_window.scale_factor() as f32,
-        };
-        commands.insert_resource(EguiScreenDesciptorRes(screen_descriptor));
+        WINIT_WINDOWS.with_borrow_mut(|winit_windows| {
+            let winit_window = winit_windows
+                .get_window(window)
+                .expect("winit window not found");
+            commands.insert_resource(EguiWinitState(egui_winit::State::new(
+                ctx.clone(),
+                egui::ViewportId::ROOT,
+                &winit_window
+                    .display_handle()
+                    .expect("Failed to get display handle"),
+                None,
+                None,
+                None,
+            )));
+            let screen_descriptor = egui_wgpu::ScreenDescriptor {
+                size_in_pixels: [
+                    winit_window.inner_size().width,
+                    winit_window.inner_size().height,
+                ],
+                pixels_per_point: winit_window.scale_factor() as f32,
+            };
+            commands.insert_resource(EguiScreenDesciptorRes(screen_descriptor));
+        });
     }
     commands.insert_resource(EguiCtxRes(ctx));
     commands.insert_resource(EguiPaintJobs(vec![]));
@@ -108,13 +110,15 @@ fn begin_frame(
     egui_ctx: Res<EguiCtxRes>,
     mut winit_state: ResMut<EguiWinitState>,
     windows: Query<Entity, With<Window>>,
-    winit_windows: NonSendMut<WinitWindows>,
+    _marker: NonSendMarker,
 ) {
     if let Ok(window) = windows.single() {
-        let winit_window = winit_windows
-            .get_window(window)
-            .expect("winit window not found");
-        egui_ctx.begin_pass(winit_state.take_egui_input(winit_window));
+        WINIT_WINDOWS.with_borrow_mut(|winit_windows| {
+            let winit_window = winit_windows
+                .get_window(window)
+                .expect("winit window not found");
+            egui_ctx.begin_pass(winit_state.take_egui_input(winit_window));
+        });
     }
 }
 
@@ -145,10 +149,16 @@ pub fn egui_render_pass(
     paint_jobs.0 = egui_ctx.tessellate(shapes, window.scale_factor() as f32);
 
     for (id, image_delta) in textures_delta.set {
-        egui_renderer.update_texture(device, queue, id, &image_delta);
+        egui_renderer.update_texture(&device.0, &queue.0, id, &image_delta);
     }
 
-    egui_renderer.update_buffers(device, queue, encoder, &paint_jobs.0, &screen_descriptor.0);
+    egui_renderer.update_buffers(
+        &device.0,
+        &queue.0,
+        encoder,
+        &paint_jobs.0,
+        &screen_descriptor.0,
+    );
 
     {
         let mut rpass = encoder
@@ -160,6 +170,7 @@ pub fn egui_render_pass(
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
                     },
+                    depth_slice: None,
                 })],
                 depth_stencil_attachment: None,
                 label: Some("egui main render pass"),
@@ -176,19 +187,21 @@ pub fn egui_render_pass(
 }
 
 fn handle_winit_events(
-    mut winit_events: EventReader<RawWinitWindowEvent>,
+    mut winit_events: MessageReader<RawWinitWindowEvent>,
     windows: Query<Entity, With<PrimaryWindow>>,
-    winit_windows: NonSend<WinitWindows>,
     mut egui_winit_state: ResMut<EguiWinitState>,
+    _marker: NonSendMarker,
 ) {
-    let window = if let Ok(window) = windows.single() {
-        winit_windows
-            .get_window(window)
-            .expect("Failed to get primary window")
-    } else {
-        return;
-    };
-    for ev in winit_events.read() {
-        let _ = egui_winit_state.on_window_event(window, &ev.event);
-    }
+    WINIT_WINDOWS.with_borrow_mut(|winit_windows| {
+        let window = if let Ok(window) = windows.single() {
+            winit_windows
+                .get_window(window)
+                .expect("Failed to get primary window")
+        } else {
+            return;
+        };
+        for ev in winit_events.read() {
+            let _ = egui_winit_state.on_window_event(window, &ev.event);
+        }
+    });
 }

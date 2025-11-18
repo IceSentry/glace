@@ -10,21 +10,21 @@ opt-level = 1
 opt-level = 3
 
 [dependencies]
-wgpu = "24.0.3"
-winit = "0.30.5"
-anyhow = "1.0.93"
-futures-lite = "2.5.0"
-egui = "0.31.1"
-egui-wgpu = "0.31.1"
-egui-winit = "0.31.1"
-# egui = { git = "https://github.com/emilk/egui", rev = "773232b13914b1e4e6e28fcecde80cd163f59bf5" }
-# egui-wgpu = { git = "https://github.com/emilk/egui", rev = "773232b13914b1e4e6e28fcecde80cd163f59bf5" }
-# egui-winit = { git = "https://github.com/emilk/egui", rev = "773232b13914b1e4e6e28fcecde80cd163f59bf5" }
-bytemuck = "1.20.0"
+wgpu = "26"
+winit = "0.30"
+anyhow = "1.0"
+futures-lite = "2"
+# egui = "0.33"
+# egui-wgpu = "0.33"
+# egui-winit = "0.33"
+egui = { git = "https://github.com/emilk/egui", rev = "bd45406fad35992e7b0c53988859ab86f79d5df9" }
+egui-wgpu = { git = "https://github.com/emilk/egui", rev = "bd45406fad35992e7b0c53988859ab86f79d5df9" }
+egui-winit = { git = "https://github.com/emilk/egui", rev = "bd45406fad35992e7b0c53988859ab86f79d5df9" }
+bytemuck = "1.24.0"
 gltf = "1.4.1"
 
 [dependencies.bevy]
-version = "0.16.0"
+version = "0.17.3"
 # git = "https://github.com/bevyengine/bevy"
 # rev = "5adf831b42a5749aef5ebe91912323083e2ded00"
 default-features = false
@@ -35,6 +35,8 @@ features = [
   "multi_threaded",
   "bevy_window",
   "bevy_log",
+  "bevy_mesh",
+  "debug",
 ]
 
 [features]

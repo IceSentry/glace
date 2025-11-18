@@ -1,12 +1,11 @@
+use crate::buffer_vec::BufferVec;
 use bevy::{prelude::*, render::render_resource::ShaderType};
 use wgpu::BufferUsages;
 
-use crate::buffer_vec::BufferVec;
-
 pub struct MeshPlugin;
 impl Plugin for MeshPlugin {
-    fn build(&self, app: &mut App) {
-        // app.add_systems(PostUpdate, convert_mesh);
+    fn build(&self, _app: &mut App) {
+        // _app.add_systems(PostUpdate, convert_mesh);
     }
 }
 
@@ -41,7 +40,7 @@ pub struct Mesh {
     pub indices: Vec<u32>,
 }
 
-fn bevy_mesh_to_glace_mesh(bevy_mesh: &bevy::render::mesh::Mesh) -> Mesh {
+fn bevy_mesh_to_glace_mesh(bevy_mesh: &bevy::mesh::Mesh) -> Mesh {
     let mut indices = vec![];
     let mut vertices = vec![];
     if let Some(mesh_indices) = bevy_mesh.indices() {
@@ -49,7 +48,7 @@ fn bevy_mesh_to_glace_mesh(bevy_mesh: &bevy::render::mesh::Mesh) -> Mesh {
             indices.push(index as u32);
         }
     }
-    if let Some(positions) = bevy_mesh.attribute(bevy::render::mesh::Mesh::ATTRIBUTE_POSITION) {
+    if let Some(positions) = bevy_mesh.attribute(bevy::mesh::Mesh::ATTRIBUTE_POSITION) {
         for pos in positions.as_float3().unwrap() {
             vertices.push(Vertex {
                 position: Vec3::new(pos[0], pos[1], pos[2]),
@@ -65,7 +64,7 @@ fn bevy_mesh_to_glace_mesh(bevy_mesh: &bevy::render::mesh::Mesh) -> Mesh {
 
 fn convert_mesh(
     mut commands: Commands,
-    meshes: Res<Assets<bevy::render::mesh::Mesh>>,
+    meshes: Res<Assets<bevy::mesh::Mesh>>,
     added_meshes: Query<(Entity, &Mesh3d), Added<Mesh3d>>,
 ) {
     for (entity, mesh) in &added_meshes {
