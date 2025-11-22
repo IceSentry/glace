@@ -32,7 +32,7 @@ features = [
   "bevy_asset",
   "bevy_winit",
   "bevy_render",
-  "multi_threaded",
+  # "multi_threaded",
   "bevy_window",
   "bevy_log",
   "bevy_mesh",

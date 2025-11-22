@@ -17,8 +17,7 @@ use bevy::{
     winit::{WakeUp, WinitPlugin, WINIT_WINDOWS},
 };
 use egui_plugin::{
-    egui_render_pass, EguiCtxRes, EguiPaintJobs, EguiPlugin, EguiRenderer, EguiScreenDesciptorRes,
-    EguiWinitState,
+    EguiCtxRes, EguiPaintJobs, EguiPlugin, EguiRenderer, EguiScreenDesciptorRes, EguiWinitState,
 };
 use gltf_loader::load_gltf;
 use mesh::{upload_mesh, GpuMeshBuffers, MeshPlugin, Vertex};
@@ -37,6 +36,8 @@ mod ui;
 
 use winit::dpi::PhysicalSize;
 
+use crate::egui_plugin::egui_render_pass;
+
 const MAIN_TEXTURE_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
 
 fn main() {
@@ -46,11 +47,11 @@ fn main() {
             WindowPlugin {
                 primary_window: Some(Window {
                     title: "glace2".into(),
-                    present_mode: PresentMode::AutoVsync,
+                    present_mode: PresentMode::AutoNoVsync,
                     // Hide the window until the gpu is ready to draw
                     visible: false,
                     resolution: {
-                        let mut res = WindowResolution::new(1920, 1080);
+                        let mut res = WindowResolution::new(1280, 720);
                         // All this forced scale factor thing is because macos defaults to a really
                         // high scale factor
                         res.set_scale_factor_override(Some(1.0));
@@ -70,7 +71,14 @@ fn main() {
             MeshPlugin,
         ))
         .add_systems(Startup, (setup_renderer, load_assets).chain())
-        .add_systems(Update, (quit_on_q, update_window_title, ui::ui))
+        .add_systems(
+            Update,
+            (
+                quit_on_q,
+                // update_window_title,
+                ui::ui,
+            ),
+        )
         .add_systems(PostUpdate, (resize, render).chain())
         .insert_resource(ComputePushConstants {
             data1: Vec4::new(1.0, 1.0, 0.0, 1.0),
