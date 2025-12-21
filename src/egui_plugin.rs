@@ -102,7 +102,11 @@ fn setup_render_pass(world: &mut World) {
         .expect("Failed to get surface texture while initializing egui")
         .texture
         .format();
-    let egui_renderer = egui_wgpu::Renderer::new(&device.0, format, None, 1, false);
+    let egui_renderer = egui_wgpu::Renderer::new(
+        &device.0,
+        format,
+        egui_wgpu::RendererOptions::default(),
+    );
     world.insert_non_send_resource(EguiRenderer(egui_renderer));
 }
 

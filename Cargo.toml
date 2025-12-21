@@ -10,21 +10,21 @@ opt-level = 1
 opt-level = 3
 
 [dependencies]
-wgpu = "26"
+wgpu = "27"
 winit = "0.30"
 anyhow = "1.0"
 futures-lite = "2"
-# egui = "0.33"
-# egui-wgpu = "0.33"
-# egui-winit = "0.33"
-egui = { git = "https://github.com/emilk/egui", rev = "bd45406fad35992e7b0c53988859ab86f79d5df9" }
-egui-wgpu = { git = "https://github.com/emilk/egui", rev = "bd45406fad35992e7b0c53988859ab86f79d5df9" }
-egui-winit = { git = "https://github.com/emilk/egui", rev = "bd45406fad35992e7b0c53988859ab86f79d5df9" }
+egui = "0.33"
+egui-wgpu = "0.33"
+egui-winit = "0.33"
+# egui = { git = "https://github.com/emilk/egui", rev = "bd45406fad35992e7b0c53988859ab86f79d5df9" }
+# egui-wgpu = { git = "https://github.com/emilk/egui", rev = "bd45406fad35992e7b0c53988859ab86f79d5df9" }
+# egui-winit = { git = "https://github.com/emilk/egui", rev = "bd45406fad35992e7b0c53988859ab86f79d5df9" }
 bytemuck = "1.24.0"
 gltf = "1.4.1"
 
 [dependencies.bevy]
-version = "0.17.3"
+version = "=0.18.0-rc.1"
 # git = "https://github.com/bevyengine/bevy"
 # rev = "5adf831b42a5749aef5ebe91912323083e2ded00"
 default-features = false
@@ -37,6 +37,8 @@ features = [
   "bevy_log",
   "bevy_mesh",
   "debug",
+  # seems like a bug in the rc that forces me to specify this
+  "gamepad",
 ]
 
 [features]

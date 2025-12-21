@@ -14,7 +14,7 @@ use bevy::{
         binding_types::texture_storage_2d, BindGroupEntries, BindGroupLayoutEntries,
     },
     window::{PresentMode, PrimaryWindow, RawHandleWrapper, WindowResized, WindowResolution},
-    winit::{WakeUp, WinitPlugin, WINIT_WINDOWS},
+    winit::{WinitPlugin, WINIT_WINDOWS},
 };
 use egui_plugin::{
     EguiCtxRes, EguiPaintJobs, EguiPlugin, EguiRenderer, EguiScreenDesciptorRes, EguiWinitState,
@@ -23,9 +23,10 @@ use gltf_loader::load_gltf;
 use mesh::{upload_mesh, GpuMeshBuffers, MeshPlugin, Vertex};
 use wgpu::{
     util::{TextureBlitter, TextureBlitterBuilder},
-    BindingResource, CommandEncoderDescriptor, CompareFunction, DepthStencilState, Features,
-    LoadOp, MemoryHints, Operations, PushConstantRange, RenderPassDepthStencilAttachment,
-    ShaderStages, StoreOp, TextureFormat, TextureUsages, TextureViewDescriptor,
+    BindingResource, CommandEncoderDescriptor, CompareFunction, DepthStencilState,
+    ExperimentalFeatures, Features, LoadOp, MemoryHints, Operations, PushConstantRange,
+    RenderPassDepthStencilAttachment, ShaderStages, StoreOp, TextureFormat, TextureUsages,
+    TextureViewDescriptor,
 };
 
 mod buffer_vec;
@@ -63,7 +64,7 @@ fn main() {
                 ..default()
             },
             AccessibilityPlugin,
-            WinitPlugin::<WakeUp>::default(),
+            WinitPlugin::default(),
             FrameTimeDiagnosticsPlugin::default(),
             InputPlugin,
             LogPlugin::default(),
@@ -159,6 +160,8 @@ fn setup_renderer(
                 label: Some("RenderDevice"),
                 memory_hints: MemoryHints::MemoryUsage,
                 trace: wgpu::Trace::Off,
+                // SAFETY: YOLO
+                experimental_features: unsafe { ExperimentalFeatures::enabled() },
             }))
             .expect("Failed to request device");
 
