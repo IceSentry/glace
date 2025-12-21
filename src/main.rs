@@ -71,14 +71,7 @@ fn main() {
             MeshPlugin,
         ))
         .add_systems(Startup, (setup_renderer, load_assets).chain())
-        .add_systems(
-            Update,
-            (
-                quit_on_q,
-                // update_window_title,
-                ui::ui,
-            ),
-        )
+        .add_systems(Update, (quit_on_q, ui::ui))
         .add_systems(PostUpdate, (resize, render).chain())
         .insert_resource(ComputePushConstants {
             data1: Vec4::new(1.0, 1.0, 0.0, 1.0),
@@ -90,24 +83,6 @@ fn main() {
 fn quit_on_q(input: Res<ButtonInput<KeyCode>>, mut app_exit: MessageWriter<AppExit>) {
     if input.just_pressed(KeyCode::KeyQ) {
         app_exit.write_default();
-    }
-}
-
-fn update_window_title(
-    mut windows: Query<&mut Window, With<PrimaryWindow>>,
-    diagnostics: Res<DiagnosticsStore>,
-) {
-    for mut window in &mut windows {
-        if let (Some(fps), Some(dt)) = (
-            diagnostics
-                .get(&FrameTimeDiagnosticsPlugin::FPS)
-                .and_then(|fps| fps.smoothed()),
-            diagnostics
-                .get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)
-                .and_then(|dt| dt.smoothed()),
-        ) {
-            window.title = format!("FPS: {:.0}, dt: {:.2}ms", fps, dt);
-        }
     }
 }
 
