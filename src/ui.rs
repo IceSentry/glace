@@ -1,6 +1,6 @@
 use std::ops::RangeInclusive;
 
-use bevy::prelude::*;
+use bevy::{ecs::system::NonSendMarker, prelude::*};
 
 use crate::{egui_plugin::EguiCtxRes, ComputePushConstants};
 

@@ -7,7 +7,10 @@ use bevy::{
 };
 use wgpu::{rwh::HasDisplayHandle, CommandEncoder, TextureView};
 
-use crate::{setup_renderer, Device, Queue, Surface};
+use crate::{
+    render_context::RenderContext, setup_renderer, Device, MainTextureCache, Queue, Surface,
+    SurfaceTexture,
+};
 
 #[derive(Resource, Deref, DerefMut)]
 pub struct EguiCtxRes(pub egui::Context);
@@ -102,11 +105,8 @@ fn setup_render_pass(world: &mut World) {
         .expect("Failed to get surface texture while initializing egui")
         .texture
         .format();
-    let egui_renderer = egui_wgpu::Renderer::new(
-        &device.0,
-        format,
-        egui_wgpu::RendererOptions::default(),
-    );
+    let egui_renderer =
+        egui_wgpu::Renderer::new(&device.0, format, egui_wgpu::RendererOptions::default());
     world.insert_non_send_resource(EguiRenderer(egui_renderer));
 }
 
@@ -127,67 +127,78 @@ fn begin_frame(
 }
 
 pub fn egui_render_pass(
-    window: &winit::window::Window,
-    egui_renderer: &mut EguiRenderer,
-    paint_jobs: &mut EguiPaintJobs,
-    egui_ctx: &EguiCtxRes,
-    state: &mut EguiWinitState,
-    screen_descriptor: &EguiScreenDesciptorRes,
-    device: &Device,
-    queue: &Queue,
-    encoder: &mut CommandEncoder,
-    view: &TextureView,
+    _marker: NonSendMarker,
+    mut ctx: RenderContext,
+    windows: Query<Entity, With<Window>>,
+    (surface, device, queue): (Res<Surface>, Res<Device>, Res<Queue>),
+    screen_descriptor: Res<EguiScreenDesciptorRes>,
+    mut egui_renderer: NonSendMut<EguiRenderer>,
+    mut paint_jobs: ResMut<EguiPaintJobs>,
+    egui_ctx: Res<EguiCtxRes>,
+    mut state: ResMut<EguiWinitState>,
+    surface_texture: Res<SurfaceTexture>,
 ) {
-    let egui::FullOutput {
-        shapes,
-        textures_delta,
-        platform_output,
-        ..
-    } = egui_ctx.end_pass();
+    WINIT_WINDOWS.with_borrow_mut(|winit_windows| {
+        let window = if let Ok(window) = windows.single() {
+            winit_windows
+                .get_window(window)
+                .expect("Failed to get primary window")
+        } else {
+            return;
+        };
+        let egui::FullOutput {
+            shapes,
+            textures_delta,
+            platform_output,
+            ..
+        } = egui_ctx.end_pass();
 
-    state.handle_platform_output(window, platform_output);
-    if window.inner_size().width < screen_descriptor.0.size_in_pixels[0] {
-        //warn!("egui screen desc too big");
-        return;
-    }
-    paint_jobs.0 = egui_ctx.tessellate(shapes, window.scale_factor() as f32);
+        state.handle_platform_output(window, platform_output);
+        if window.inner_size().width < screen_descriptor.0.size_in_pixels[0] {
+            //warn!("egui screen desc too big");
+            return;
+        }
+        paint_jobs.0 = egui_ctx.tessellate(shapes, window.scale_factor() as f32);
 
-    for (id, image_delta) in textures_delta.set {
-        egui_renderer.update_texture(&device.0, &queue.0, id, &image_delta);
-    }
+        for (id, image_delta) in textures_delta.set {
+            egui_renderer.update_texture(&device.0, &queue.0, id, &image_delta);
+        }
 
-    egui_renderer.update_buffers(
-        &device.0,
-        &queue.0,
-        encoder,
-        &paint_jobs.0,
-        &screen_descriptor.0,
-    );
+        egui_renderer.update_buffers(
+            &device.0,
+            &queue.0,
+            ctx.command_encoder(),
+            &paint_jobs.0,
+            &screen_descriptor.0,
+        );
 
-    {
-        let mut rpass = encoder
-            .begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                label: Some("egui main render pass"),
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            })
-            .forget_lifetime();
-        rpass.push_debug_group("egui_pass");
+        {
+            let mut rpass = ctx
+                .command_encoder()
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &surface_texture.1,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: None,
+                    label: Some("egui main render pass"),
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                })
+                .forget_lifetime();
 
-        egui_renderer.render(&mut rpass, &paint_jobs.0, &screen_descriptor.0);
+            rpass.push_debug_group("egui_pass");
 
-        rpass.pop_debug_group();
-    }
+            egui_renderer.render(&mut rpass, &paint_jobs.0, &screen_descriptor.0);
+
+            rpass.pop_debug_group();
+        }
+    });
 }
 
 fn handle_winit_events(

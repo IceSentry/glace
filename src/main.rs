@@ -5,7 +5,7 @@ use std::borrow::Cow;
 
 use bevy::{
     a11y::AccessibilityPlugin,
-    diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
+    diagnostic::FrameTimeDiagnosticsPlugin,
     ecs::system::NonSendMarker,
     input::InputPlugin,
     log::LogPlugin,
@@ -16,28 +16,31 @@ use bevy::{
     window::{PresentMode, PrimaryWindow, RawHandleWrapper, WindowResized, WindowResolution},
     winit::{WinitPlugin, WINIT_WINDOWS},
 };
-use egui_plugin::{
-    EguiCtxRes, EguiPaintJobs, EguiPlugin, EguiRenderer, EguiScreenDesciptorRes, EguiWinitState,
-};
+use egui_plugin::{EguiPlugin, EguiScreenDesciptorRes};
 use gltf_loader::load_gltf;
 use mesh::{upload_mesh, GpuMeshBuffers, MeshPlugin, Vertex};
 use wgpu::{
     util::{TextureBlitter, TextureBlitterBuilder},
-    BindingResource, CommandEncoderDescriptor, CompareFunction, DepthStencilState,
-    ExperimentalFeatures, Features, LoadOp, MemoryHints, Operations, PushConstantRange,
-    RenderPassDepthStencilAttachment, ShaderStages, StoreOp, TextureFormat, TextureUsages,
-    TextureViewDescriptor,
+    BindingResource, CompareFunction, DepthStencilState, ExperimentalFeatures, Extent3d, Features,
+    LoadOp, MemoryHints, Operations, PushConstantRange, RenderPassDepthStencilAttachment,
+    ShaderStages, StoreOp, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
 };
 
 mod buffer_vec;
 mod egui_plugin;
 mod gltf_loader;
 mod mesh;
+mod render_context;
+mod schedule;
 mod ui;
 
 use winit::dpi::PhysicalSize;
 
-use crate::egui_plugin::egui_render_pass;
+use crate::{
+    egui_plugin::egui_render_pass,
+    render_context::{PendingCommandBuffers, RenderContext},
+    schedule::GlaceRender,
+};
 
 const MAIN_TEXTURE_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
 
@@ -71,9 +74,23 @@ fn main() {
             EguiPlugin,
             MeshPlugin,
         ))
+        .add_schedule(schedule::GlaceRender::schedule())
         .add_systems(Startup, (setup_renderer, load_assets).chain())
         .add_systems(Update, (quit_on_q, ui::ui))
-        .add_systems(PostUpdate, (resize, render).chain())
+        .add_systems(Last, (resize, run_glace_render_schedule).chain())
+        .add_systems(
+            GlaceRender,
+            (
+                prepare_main_texture,
+                ApplyDeferred,
+                main_pass,
+                blit,
+                egui_render_pass,
+                ApplyDeferred,
+                submit,
+            )
+                .chain(),
+        )
         .insert_resource(ComputePushConstants {
             data1: Vec4::new(1.0, 1.0, 0.0, 1.0),
             data2: Vec4::new(0.0, 1.0, 0.0, 1.0),
@@ -193,6 +210,8 @@ fn setup_renderer(
         commands.insert_resource(Queue(queue));
         commands.insert_resource(SurfaceConfiguration(config));
         commands.insert_resource(Surface(surface));
+
+        commands.insert_resource(PendingCommandBuffers::default());
 
         // At this point, the gpu is ready to draw so we can make the window visible
         winit_window.set_visible(true);
@@ -343,126 +362,145 @@ struct GpuDrawPushConstants {
     world_matrix: Mat4,
 }
 
-fn render(
+fn run_glace_render_schedule(world: &mut World) {
+    world.run_schedule(GlaceRender);
+}
+
+#[derive(Resource)]
+struct MainViewTarget {
+    extent: Extent3d,
+    view: TextureView,
+}
+
+#[derive(Resource)]
+struct MainTextureCache(wgpu::Texture, wgpu::TextureView);
+
+#[derive(Resource)]
+struct DepthTextureCache(wgpu::Texture, wgpu::TextureView);
+
+#[derive(Resource)]
+struct SurfaceTexture(Option<wgpu::SurfaceTexture>, wgpu::TextureView);
+
+fn prepare_main_texture(
+    mut commands: Commands,
     (surface, device, queue): (Res<Surface>, Res<Device>, Res<Queue>),
-    mut main_texture_cache: Local<Option<(wgpu::Texture, wgpu::TextureView)>>,
-    mut depth_texture_cache: Local<Option<(wgpu::Texture, wgpu::TextureView)>>,
-    swapchain_blitter: Res<SwapchainTextureBlitter>,
-    gradient_pipeline: Res<GradientPipeline>,
-    windows: Query<Entity, With<Window>>,
-    _marker: NonSendMarker,
-    (egui_screen_descriptor, mut egui_renderer, mut paint_jobs, egui_ctx, mut egui_state): (
-        Res<EguiScreenDesciptorRes>,
-        NonSendMut<EguiRenderer>,
-        ResMut<EguiPaintJobs>,
-        Res<EguiCtxRes>,
-        ResMut<EguiWinitState>,
-    ),
+    mut main_texture_cache: Option<ResMut<MainTextureCache>>,
+    mut depth_texture_cache: Option<ResMut<DepthTextureCache>>,
     mut window_resized_messsages: MessageReader<WindowResized>,
+) {
+    let frame = surface
+        .get_current_texture()
+        .expect("Failed to get current texture");
+
+    let main_texture_format = MAIN_TEXTURE_FORMAT;
+    let desc = wgpu::TextureDescriptor {
+        label: Some("Main Texture"),
+        size: frame.texture.size(),
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: main_texture_format,
+        usage: TextureUsages::COPY_SRC
+            | TextureUsages::COPY_DST
+            | TextureUsages::STORAGE_BINDING
+            | TextureUsages::RENDER_ATTACHMENT
+            | TextureUsages::TEXTURE_BINDING,
+        view_formats: &[main_texture_format],
+    };
+    let depth_texture_desc = wgpu::TextureDescriptor {
+        label: Some("Depth Texture"),
+        size: frame.texture.size(),
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: TextureFormat::Depth32Float,
+        usage: TextureUsages::COPY_SRC
+            | TextureUsages::COPY_DST
+            | TextureUsages::RENDER_ATTACHMENT
+            | TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    };
+
+    if let Some(main_texture_cache) = main_texture_cache.as_mut() {
+        if let Some(depth_texture_cache) = depth_texture_cache.as_mut() {
+            if window_resized_messsages.read().count() > 0 {
+                let main_texture = device.create_texture(&desc);
+                let main_texture_view = main_texture.create_view(&TextureViewDescriptor::default());
+                main_texture_cache.0 = main_texture;
+                main_texture_cache.1 = main_texture_view;
+
+                let depth_texture = device.create_texture(&depth_texture_desc);
+                let depth_texture_view =
+                    depth_texture.create_view(&TextureViewDescriptor::default());
+                depth_texture_cache.0 = depth_texture;
+                depth_texture_cache.1 = depth_texture_view;
+            }
+        }
+    } else {
+        let main_texture = device.create_texture(&desc);
+        let main_texture_view = main_texture.create_view(&TextureViewDescriptor::default());
+        commands.insert_resource(MainTextureCache(main_texture, main_texture_view));
+
+        let depth_texture = device.create_texture(&depth_texture_desc);
+        let depth_texture_view = depth_texture.create_view(&TextureViewDescriptor::default());
+        commands.insert_resource(DepthTextureCache(depth_texture, depth_texture_view));
+    }
+
+    // TODO just update the existing resource
+    let view = frame.texture.create_view(&TextureViewDescriptor::default());
+    commands.insert_resource(SurfaceTexture(Some(frame), view));
+}
+
+fn main_pass(
+    mut ctx: RenderContext,
+    (_surface, device, _queue): (Res<Surface>, Res<Device>, Res<Queue>),
+    gradient_pipeline: Res<GradientPipeline>,
     compute_push_constants: Res<ComputePushConstants>,
+    main_texture_cache: Res<MainTextureCache>,
+    depth_texture_cache: Res<DepthTextureCache>,
     (mesh_pipeline, meshes): (Res<MeshPipeline>, Query<&GpuMesh>),
-    time: Res<Time>,
     mut camera_transform: Local<Option<Transform>>,
 ) {
-    WINIT_WINDOWS.with_borrow_mut(|winit_windows| {
-        let window = if let Ok(window) = windows.single() {
-            winit_windows
-                .get_window(window)
-                .expect("Failed to get primary window")
-        } else {
-            return;
-        };
+    let main_texture_view = main_texture_cache.1.clone();
 
-        let frame = surface
-            .get_current_texture()
-            .expect("Failed to get texture");
-        let view = frame.texture.create_view(&TextureViewDescriptor::default());
-        // TODO better handle resize, maybe just use bevy's TextureCache
-        if main_texture_cache.is_none()
-            || window_resized_messsages.read().count() > 0
-            || depth_texture_cache.is_none()
-        {
-            let main_texture_format = MAIN_TEXTURE_FORMAT;
-            let main_texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("Main Texture"),
-                size: frame.texture.size(),
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: main_texture_format,
-                usage: TextureUsages::COPY_SRC
-                    | TextureUsages::COPY_DST
-                    | TextureUsages::STORAGE_BINDING
-                    | TextureUsages::RENDER_ATTACHMENT
-                    | TextureUsages::TEXTURE_BINDING,
-                view_formats: &[main_texture_format],
-            });
-            let main_texture_view = main_texture.create_view(&TextureViewDescriptor::default());
-            *main_texture_cache = Some((main_texture, main_texture_view));
+    let draw_extent = main_texture_cache.0.size();
+    // Gradient compute
+    {
+        #[cfg(feature = "trace")]
+        let _span = info_span!("compute gradient").entered();
 
-            let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("Depth Texture"),
-                size: frame.texture.size(),
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: TextureFormat::Depth32Float,
-                usage: TextureUsages::COPY_SRC
-                    | TextureUsages::COPY_DST
-                    | TextureUsages::RENDER_ATTACHMENT
-                    | TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            let depth_texture_view = depth_texture.create_view(&TextureViewDescriptor::default());
-            *depth_texture_cache = Some((depth_texture, depth_texture_view));
-        }
-        let Some((_main_texture, main_texture_view)) = main_texture_cache.as_ref() else {
-            panic!("Failed to get main texture");
-        };
+        let gradient_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Gradient Compute Bind Group"),
+            layout: &gradient_pipeline.layout,
+            entries: &BindGroupEntries::sequential((BindingResource::TextureView(
+                &main_texture_view,
+            ),)),
+        });
 
-        let Some((_depth_texture, depth_texture_view)) = depth_texture_cache.as_ref() else {
-            panic!("Failed to get depth texture");
-        };
-        let mut command_encoder =
-            device.create_command_encoder(&CommandEncoderDescriptor::default());
+        let mut compute_pass = ctx
+            .command_encoder()
+            .begin_compute_pass(&wgpu::ComputePassDescriptor::default());
 
-        let draw_extent = frame.texture.size();
+        compute_pass.set_pipeline(&gradient_pipeline.pipeline);
+        compute_pass.set_bind_group(0, &gradient_bind_group, &[]);
+        compute_pass.set_push_constants(0, bytemuck::bytes_of(&*compute_push_constants));
+        compute_pass.dispatch_workgroups(
+            (main_texture_cache.0.width() as f32 / 16.0).ceil() as u32,
+            (main_texture_cache.0.height() as f32 / 16.0).ceil() as u32,
+            1,
+        );
+    }
 
-        // Gradient compute
-        {
-            #[cfg(feature = "trace")]
-            let _span = info_span!("compute gradient").entered();
+    {
+        #[cfg(feature = "trace")]
+        let _span = info_span!("main opaque mesh").entered();
 
-            let gradient_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Gradient Compute Bind Group"),
-                layout: &gradient_pipeline.layout,
-                entries: &BindGroupEntries::sequential((BindingResource::TextureView(
-                    main_texture_view,
-                ),)),
-            });
-
-            let mut compute_pass =
-                command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
-
-            compute_pass.set_pipeline(&gradient_pipeline.pipeline);
-            compute_pass.set_bind_group(0, &gradient_bind_group, &[]);
-            compute_pass.set_push_constants(0, bytemuck::bytes_of(&*compute_push_constants));
-            compute_pass.dispatch_workgroups(
-                (draw_extent.width as f32 / 16.0).ceil() as u32,
-                (draw_extent.height as f32 / 16.0).ceil() as u32,
-                1,
-            );
-        }
-
-        // Main opaque mesh
-        {
-            #[cfg(feature = "trace")]
-            let _span = info_span!("main opaque mesh").entered();
-
-            let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut rpass = ctx
+            .command_encoder()
+            .begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Main Opaque Mesh Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: main_texture_view,
+                    view: &main_texture_view.clone(),
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
@@ -471,7 +509,7 @@ fn render(
                     depth_slice: None,
                 })],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: depth_texture_view,
+                    view: &depth_texture_cache.1,
                     depth_ops: Some(Operations {
                         load: LoadOp::Clear(0.0),
                         store: StoreOp::Store,
@@ -482,73 +520,73 @@ fn render(
                 timestamp_writes: None,
             });
 
-            let draw_extent = frame.texture.size();
-            rpass.set_viewport(
-                0.0,
-                0.0,
-                draw_extent.width as f32,
-                draw_extent.height as f32,
-                0.0,
-                1.0,
-            );
-            rpass.set_scissor_rect(0, 0, draw_extent.width, draw_extent.height);
+        rpass.set_viewport(
+            0.0,
+            0.0,
+            draw_extent.width as f32,
+            draw_extent.height as f32,
+            0.0,
+            1.0,
+        );
+        rpass.set_scissor_rect(0, 0, draw_extent.width, draw_extent.height);
 
-            rpass.set_pipeline(&mesh_pipeline.pipeline);
+        rpass.set_pipeline(&mesh_pipeline.pipeline);
 
-            // TODO create a camera entity
-            // let view = Mat4::from_translation(Vec3::new(0.0, 0.0, -5.0));
-            if camera_transform.is_none() {
-                let transform = Transform::from_translation(Vec3::new(0.0, 0.0, -5.0));
-                *camera_transform = Some(transform);
-            }
-            let view = camera_transform.unwrap().compute_affine();
-
-            let projection = Mat4::perspective_infinite_reverse_rh(
-                70.0,
-                draw_extent.width as f32 / draw_extent.height as f32,
-                0.1,
-            );
-            let world_matrix = projection * view;
-            let push_constant = GpuDrawPushConstants { world_matrix };
-            rpass.set_push_constants(
-                ShaderStages::VERTEX_FRAGMENT,
-                0,
-                bytemuck::bytes_of(&push_constant),
-            );
-
-            for mesh in meshes {
-                rpass.set_vertex_buffer(0, mesh.0.vertex_buffer.buffer().unwrap().slice(..));
-                rpass.set_index_buffer(
-                    mesh.0.index_buffer.buffer().unwrap().slice(..),
-                    wgpu::IndexFormat::Uint32,
-                );
-                rpass.draw_indexed(0..mesh.0.index_buffer.len() as u32, 0, 0..1);
-            }
+        // TODO create a camera entity
+        // let view = Mat4::from_translation(Vec3::new(0.0, 0.0, -5.0));
+        if camera_transform.is_none() {
+            let transform = Transform::from_translation(Vec3::new(0.0, 0.0, -5.0));
+            *camera_transform = Some(transform);
         }
+        let view = camera_transform.unwrap().compute_affine();
 
-        // Blit main texture to swapchain
-        {
-            #[cfg(feature = "trace")]
-            let _span = info_span!("blit").entered();
-
-            swapchain_blitter.copy(&device, &mut command_encoder, main_texture_view, &view);
-        }
-
-        // Render egui
-        egui_render_pass(
-            window,
-            &mut egui_renderer,
-            &mut paint_jobs,
-            &egui_ctx,
-            &mut egui_state,
-            &egui_screen_descriptor,
-            &device,
-            &queue,
-            &mut command_encoder,
-            &view,
+        let projection = Mat4::perspective_infinite_reverse_rh(
+            70.0,
+            draw_extent.width as f32 / draw_extent.height as f32,
+            0.1,
+        );
+        let world_matrix = projection * view;
+        let push_constant = GpuDrawPushConstants { world_matrix };
+        rpass.set_push_constants(
+            ShaderStages::VERTEX_FRAGMENT,
+            0,
+            bytemuck::bytes_of(&push_constant),
         );
 
-        queue.submit(Some(command_encoder.finish()));
-        frame.present();
-    });
+        for mesh in meshes {
+            rpass.set_vertex_buffer(0, mesh.0.vertex_buffer.buffer().unwrap().slice(..));
+            rpass.set_index_buffer(
+                mesh.0.index_buffer.buffer().unwrap().slice(..),
+                wgpu::IndexFormat::Uint32,
+            );
+            rpass.draw_indexed(0..mesh.0.index_buffer.len() as u32, 0, 0..1);
+        }
+    }
+}
+
+fn blit(
+    mut ctx: RenderContext,
+    (_surface, device, _queue): (Res<Surface>, Res<Device>, Res<Queue>),
+    swapchain_blitter: Res<SwapchainTextureBlitter>,
+    main_texture_cache: Res<MainTextureCache>,
+    surface_texture: Res<SurfaceTexture>,
+) {
+    swapchain_blitter.copy(
+        &device,
+        ctx.command_encoder(),
+        &main_texture_cache.1,
+        &surface_texture.1,
+    );
+}
+
+fn submit(
+    (_surface, _device, queue): (Res<Surface>, Res<Device>, Res<Queue>),
+    mut pending: ResMut<PendingCommandBuffers>,
+    mut surface_texture: ResMut<SurfaceTexture>,
+) {
+    let buffers = pending.take();
+    for b in buffers {
+        queue.submit(Some(b));
+    }
+    surface_texture.0.take().unwrap().present();
 }
