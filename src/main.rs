@@ -81,8 +81,8 @@ fn main() {
             Update,
             (
                 quit_on_q,
-                update_window_title,
-                // ui::ui,
+                // update_window_title,
+                ui::ui,
             ),
         )
         .add_systems(Last, (resize, run_glace_render_schedule).chain())
