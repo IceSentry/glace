@@ -145,6 +145,7 @@ struct ComputePushConstants {
     data2: Vec4,
 }
 
+#[allow(unused)]
 fn update_window_title(
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
     diagnostics: Res<DiagnosticsStore>,
