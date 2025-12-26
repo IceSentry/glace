@@ -1,15 +1,14 @@
 use bevy::{
-    app::{prelude::*, AppExit},
+    app::{AppExit, prelude::*},
     ecs::{prelude::*, system::NonSendMarker},
     prelude::{Deref, DerefMut},
-    window::{prelude::*, PrimaryWindow, WindowCloseRequested},
+    window::{PrimaryWindow, WindowCloseRequested, prelude::*},
     winit::{RawWinitWindowEvent, WINIT_WINDOWS},
 };
-use wgpu::{rwh::HasDisplayHandle, CommandEncoder, TextureView};
+use wgpu::rwh::HasDisplayHandle;
 
 use crate::{
-    render_context::RenderContext, setup_renderer, Device, MainTextureCache, Queue, Surface,
-    SurfaceTexture,
+    Device, Queue, Surface, SurfaceTexture, render_context::RenderContext, setup_renderer,
 };
 
 #[derive(Resource, Deref, DerefMut)]
@@ -130,7 +129,8 @@ pub fn egui_render_pass(
     _marker: NonSendMarker,
     mut ctx: RenderContext,
     windows: Query<Entity, With<Window>>,
-    (surface, device, queue): (Res<Surface>, Res<Device>, Res<Queue>),
+    device: Res<Device>,
+    queue: Res<Queue>,
     screen_descriptor: Res<EguiScreenDesciptorRes>,
     mut egui_renderer: NonSendMut<EguiRenderer>,
     mut paint_jobs: ResMut<EguiPaintJobs>,
@@ -173,6 +173,9 @@ pub fn egui_render_pass(
         );
 
         {
+            #[cfg(feature = "trace")]
+            let _span = info_span!("egui rpass").entered();
+
             let mut rpass = ctx
                 .command_encoder()
                 .begin_render_pass(&wgpu::RenderPassDescriptor {

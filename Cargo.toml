@@ -9,6 +9,10 @@ opt-level = 1
 [profile.dev.package."*"]
 opt-level = 3
 
+[features]
+trace = ["bevy/trace"]
+trace_tracy = ["trace", "bevy/trace_tracy"]
+
 [dependencies]
 wgpu = "27"
 winit = "0.30"
@@ -24,9 +28,7 @@ bytemuck = "1.24.0"
 gltf = "1.4.1"
 
 [dependencies.bevy]
-version = "=0.18.0-rc.1"
-# git = "https://github.com/bevyengine/bevy"
-# rev = "5adf831b42a5749aef5ebe91912323083e2ded00"
+version = "0.18.0-rc.1"
 default-features = false
 features = [
   "bevy_asset",
@@ -41,5 +43,3 @@ features = [
   "gamepad",
 ]
 
-[features]
-trace = []

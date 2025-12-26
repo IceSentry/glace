@@ -4,9 +4,9 @@ use bevy::{
         system::{Deferred, Res, SystemBuffer, SystemMeta, SystemParam},
         world::{DeferredWorld, World},
     },
-    log::{info_span, warn},
+    log::info_span,
 };
-use wgpu::{CommandBuffer, CommandEncoder, RenderPassDescriptor};
+use wgpu::{CommandBuffer, CommandEncoder};
 
 use crate::Device;
 
@@ -17,6 +17,7 @@ pub struct RenderContextState {
     render_device: Option<wgpu::Device>,
 }
 
+#[expect(unused)]
 impl RenderContextState {
     fn flush_encoder(&mut self) {
         if let Some(encoder) = self.command_encoder.take() {
