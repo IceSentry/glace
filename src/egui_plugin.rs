@@ -98,12 +98,12 @@ fn setup(
 fn setup_render_pass(world: &mut World) {
     let device = world.resource::<Device>();
     // We render egui directly to the swapchain so we use the surface format
-    let format = world
-        .resource::<Surface>()
-        .get_current_texture()
-        .expect("Failed to get surface texture while initializing egui")
-        .texture
-        .format();
+    let format = match world.resource::<Surface>().get_current_texture() {
+        wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => {
+            t.texture.format()
+        }
+        _ => panic!("Failed to get surface texture while initializing egui"),
+    };
     let egui_renderer =
         egui_wgpu::Renderer::new(&device.0, format, egui_wgpu::RendererOptions::default());
     world.insert_non_send_resource(EguiRenderer(egui_renderer));
@@ -192,6 +192,7 @@ pub fn egui_render_pass(
                     label: Some("egui main render pass"),
                     timestamp_writes: None,
                     occlusion_query_set: None,
+                    multiview_mask: None,
                 })
                 .forget_lifetime();
 

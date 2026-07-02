@@ -21,9 +21,8 @@ use gltf_loader::load_gltf;
 use mesh::{GpuMeshBuffers, MeshPlugin, Vertex, upload_mesh};
 use wgpu::{
     BindingResource, CompareFunction, DepthStencilState, ExperimentalFeatures, Features,
-    InstanceDescriptor, LoadOp, MemoryHints, Operations, PushConstantRange,
-    RenderPassDepthStencilAttachment, ShaderStages, StoreOp, TextureFormat, TextureUsages,
-    TextureViewDescriptor,
+    InstanceDescriptor, LoadOp, MemoryHints, Operations, RenderPassDepthStencilAttachment,
+    ShaderStages, StoreOp, TextureFormat, TextureUsages, TextureViewDescriptor,
     util::{TextureBlitter, TextureBlitterBuilder},
 };
 
@@ -93,13 +92,13 @@ fn main() {
                 ApplyDeferred,
                 main_pass,
                 blit,
-                // egui_render_pass,
+                egui_render_pass,
                 ApplyDeferred,
                 submit,
             )
                 .chain(),
         )
-        .insert_resource(ComputePushConstants {
+        .insert_resource(ComputeImmediates {
             data1: Vec4::new(1.0, 1.0, 0.0, 1.0),
             data2: Vec4::new(0.0, 1.0, 0.0, 1.0),
         })
@@ -140,7 +139,7 @@ struct MeshPipeline {
 
 #[derive(Resource, bytemuck::NoUninit, Clone, Copy)]
 #[repr(C)]
-struct ComputePushConstants {
+struct ComputeImmediates {
     data1: Vec4,
     data2: Vec4,
 }
@@ -183,7 +182,8 @@ fn setup_renderer(
         size.width = size.width.max(1);
         size.height = size.height.max(1);
 
-        let instance = wgpu::Instance::new(&InstanceDescriptor::from_env_or_default());
+        let instance =
+            wgpu::Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
         let surface = instance
             .create_surface(unsafe { raw_handle_wrapper.get_handle() })
             .expect("Failed to create surface");
@@ -199,7 +199,7 @@ fn setup_renderer(
 
         let (device, queue) =
             futures_lite::future::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-                required_features: Features::PUSH_CONSTANTS,
+                required_features: Features::IMMEDIATES,
                 required_limits: adapter.limits(),
                 label: Some("RenderDevice"),
                 memory_hints: MemoryHints::MemoryUsage,
@@ -273,10 +273,7 @@ fn init_mesh_pipeline(device: &wgpu::Device) -> MeshPipeline {
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
         bind_group_layouts: &[],
-        push_constant_ranges: &[PushConstantRange {
-            stages: ShaderStages::VERTEX_FRAGMENT,
-            range: 0..std::mem::size_of::<GpuDrawPushConstants>() as u32,
-        }],
+        immediate_size: std::mem::size_of::<GpuDrawImmediates>() as u32,
     });
     // TODO consider making a builder thing
     let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -307,13 +304,13 @@ fn init_mesh_pipeline(device: &wgpu::Device) -> MeshPipeline {
         },
         depth_stencil: Some(DepthStencilState {
             format: TextureFormat::Depth32Float,
-            depth_write_enabled: true,
-            depth_compare: CompareFunction::GreaterEqual,
+            depth_write_enabled: Some(true),
+            depth_compare: Some(CompareFunction::GreaterEqual),
             stencil: Default::default(),
             bias: Default::default(),
         }),
         multisample: wgpu::MultisampleState::default(),
-        multiview: None,
+        multiview_mask: None,
         cache: None,
     });
     //let bind_group_layout = render_pipeline.get_bind_group_layout(0);
@@ -337,11 +334,8 @@ fn init_compute_gradient_pipeline(device: &wgpu::Device) -> GradientPipeline {
     });
     let compute_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[&bind_group_layout],
-        push_constant_ranges: &[PushConstantRange {
-            stages: ShaderStages::COMPUTE,
-            range: 0..std::mem::size_of::<ComputePushConstants>() as u32,
-        }],
+        bind_group_layouts: &[Some(&bind_group_layout)],
+        immediate_size: std::mem::size_of::<ComputeImmediates>() as u32,
     });
     let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
         label: Some("Compute Gradient Pipeline"),
@@ -385,7 +379,7 @@ fn resize(
 
 #[derive(Resource, bytemuck::NoUninit, Clone, Copy)]
 #[repr(C)]
-struct GpuDrawPushConstants {
+struct GpuDrawImmediates {
     world_matrix: Mat4,
 }
 
@@ -410,9 +404,10 @@ fn prepare_main_texture(
     mut depth_texture: Option<ResMut<DepthTexture>>,
     mut window_resized_messsages: MessageReader<WindowResized>,
 ) {
-    let surface_texture = surface
-        .get_current_texture()
-        .expect("Failed to get current texture");
+    let surface_texture = match surface.get_current_texture() {
+        wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
+        _ => return,
+    };
 
     let main_texture_format = MAIN_TEXTURE_FORMAT;
     let desc = wgpu::TextureDescriptor {
@@ -480,7 +475,7 @@ fn main_pass(
     mut ctx: RenderContext,
     device: Res<Device>,
     gradient_pipeline: Res<GradientPipeline>,
-    compute_push_constants: Res<ComputePushConstants>,
+    compute_immediates: Res<ComputeImmediates>,
     main_texture: Res<MainTexture>,
     depth_texture: Res<DepthTexture>,
     (mesh_pipeline, meshes): (Res<MeshPipeline>, Query<&GpuMesh>),
@@ -513,7 +508,7 @@ fn main_pass(
 
             compute_pass.set_pipeline(&gradient_pipeline.pipeline);
             compute_pass.set_bind_group(0, &gradient_bind_group, &[]);
-            compute_pass.set_push_constants(0, bytemuck::bytes_of(&*compute_push_constants));
+            compute_pass.set_immediates(0, bytemuck::bytes_of(&*compute_immediates));
             compute_pass.dispatch_workgroups(
                 (main_texture.0.width() as f32 / 16.0).ceil() as u32,
                 (main_texture.0.height() as f32 / 16.0).ceil() as u32,
@@ -550,6 +545,7 @@ fn main_pass(
             }),
             occlusion_query_set: None,
             timestamp_writes: None,
+            multiview_mask: None,
         });
 
         rpass.set_viewport(
@@ -578,12 +574,8 @@ fn main_pass(
             0.1,
         );
         let world_matrix = projection * view;
-        let push_constant = GpuDrawPushConstants { world_matrix };
-        rpass.set_push_constants(
-            ShaderStages::VERTEX_FRAGMENT,
-            0,
-            bytemuck::bytes_of(&push_constant),
-        );
+        let immediates = GpuDrawImmediates { world_matrix };
+        rpass.set_immediates(0, bytemuck::bytes_of(&immediates));
 
         for mesh in meshes {
             rpass.set_vertex_buffer(0, mesh.0.vertex_buffer.buffer().unwrap().slice(..));

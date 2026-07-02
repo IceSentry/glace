@@ -1,10 +1,10 @@
 @group(0) @binding(0) var main_texture: texture_storage_2d<rgba16float, write>;
 
-struct PushConstants {
+struct Immediates {
     data1: vec4<f32>,
     data2: vec4<f32>,
 };
-var<push_constant> constants: PushConstants;
+var<immediate> constants: Immediates;
 
 @compute @workgroup_size(16, 16, 1)
 fn main(

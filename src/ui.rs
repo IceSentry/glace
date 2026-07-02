@@ -2,14 +2,14 @@ use std::ops::RangeInclusive;
 
 use bevy::prelude::*;
 
-use crate::{ComputePushConstants, egui_plugin::EguiCtxRes};
+use crate::{ComputeImmediates, egui_plugin::EguiCtxRes};
 
-pub fn ui(egui_ctx: Res<EguiCtxRes>, mut compute_push_constants: ResMut<ComputePushConstants>) {
+pub fn ui(egui_ctx: Res<EguiCtxRes>, mut compute_immediates: ResMut<ComputeImmediates>) {
     egui::Window::new("Hello").show(&egui_ctx.0, |ui| {
         ui.label("top color:");
-        drag_vec4(ui, &mut compute_push_constants.data1, 0.005, 0.0..=1.0);
+        drag_vec4(ui, &mut compute_immediates.data1, 0.005, 0.0..=1.0);
         ui.label("bottom color:");
-        drag_vec4(ui, &mut compute_push_constants.data2, 0.005, 0.0..=1.0);
+        drag_vec4(ui, &mut compute_immediates.data2, 0.005, 0.0..=1.0);
         //egui_ctx.settings_ui(ui);
     });
 }
