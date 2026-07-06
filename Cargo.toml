@@ -21,9 +21,6 @@ futures-lite = "2"
 egui = "0.35"
 egui-wgpu = "0.35"
 egui-winit = "0.35"
-# egui = { git = "https://github.com/emilk/egui", rev = "bd45406fad35992e7b0c53988859ab86f79d5df9" }
-# egui-wgpu = { git = "https://github.com/emilk/egui", rev = "bd45406fad35992e7b0c53988859ab86f79d5df9" }
-# egui-winit = { git = "https://github.com/emilk/egui", rev = "bd45406fad35992e7b0c53988859ab86f79d5df9" }
 bytemuck = "1.24.0"
 gltf = "1.4.1"
 
@@ -39,7 +36,4 @@ features = [
   "bevy_log",
   "bevy_mesh",
   "debug",
-  # seems like a bug in the rc that forces me to specify this
-  "gamepad",
 ]
-
